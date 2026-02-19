@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package worker.v1;
+
+option go_package = "github.com/aiox-platform/aiox/internal/worker/workerpb";
+
+// WorkerService is the gRPC service that Python workers connect to.
+// Workers maintain a persistent bidirectional stream for task dispatch.
+service WorkerService {
+  // TaskStream is a bidirectional stream: workers register, receive tasks, and send results.
+  rpc TaskStream(stream WorkerMessage) returns (stream ServerMessage);
+
+  // Heartbeat is a lightweight health ping from workers.
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+}
+
+// WorkerMessage is sent from the worker to the server.
+message WorkerMessage {
+  oneof payload {
+    RegisterWorker register = 1;
+    TaskResponse task_response = 2;
+  }
+}
+
+// ServerMessage is sent from the server to the worker.
+message ServerMessage {
+  oneof payload {
+    RegisterAck register_ack = 1;
+    TaskRequest task_request = 2;
+  }
+}
+
+// RegisterWorker is the first message a worker sends to identify itself.
+message RegisterWorker {
+  string worker_id = 1;
+  int32 max_concurrent = 2;
+  repeated string supported_providers = 3; // e.g., ["openai", "anthropic", "ollama"]
+}
+
+// RegisterAck is sent by the server to confirm registration.
+message RegisterAck {
+  bool accepted = 1;
+  string message = 2;
+}
+
+// TaskRequest is sent from the server to a worker to process a task.
+message TaskRequest {
+  string request_id = 1;
+  string agent_id = 2;
+  string owner_user_id = 3;
+  string user_message = 4;
+  string system_prompt = 5;       // Decrypted system prompt
+  string llm_config_json = 6;     // JSON: {"provider":"openai","model":"gpt-4o-mini","temperature":0.7,"max_tokens":1024}
+  string from_jid = 7;
+  string agent_jid = 8;
+  string agent_name = 9;
+}
+
+// TaskResponse is sent from the worker back to the server with the LLM result.
+message TaskResponse {
+  string request_id = 1;
+  string worker_id = 2;
+  string response_text = 3;
+  int32 tokens_used = 4;
+  int32 duration_ms = 5;
+  string model_used = 6;
+  string error_message = 7;       // Non-empty indicates failure
+}
+
+// HeartbeatRequest is a periodic health check from the worker.
+message HeartbeatRequest {
+  string worker_id = 1;
+  int32 active_tasks = 2;
+  int32 memory_usage_mb = 3;
+  int32 avg_latency_ms = 4;
+}
+
+// HeartbeatResponse acknowledges the heartbeat.
+message HeartbeatResponse {
+  bool ok = 1;
+}

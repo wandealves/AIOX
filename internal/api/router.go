@@ -30,6 +30,9 @@ type HandlerSet struct {
 
 	// Auth middleware
 	AuthMiddleware func(http.Handler) http.Handler
+
+	// Worker pool health (Phase 3)
+	WorkerPoolHealthy func() bool
 }
 
 func NewRouter(pool *pgxpool.Pool, natsClient *inats.Client, h HandlerSet) http.Handler {
@@ -47,6 +50,7 @@ func NewRouter(pool *pgxpool.Pool, natsClient *inats.Client, h HandlerSet) http.
 			"status":   "healthy",
 			"database": "healthy",
 			"nats":     "healthy",
+			"workers":  "healthy",
 		}
 
 		status := http.StatusOK
@@ -63,6 +67,15 @@ func NewRouter(pool *pgxpool.Pool, natsClient *inats.Client, h HandlerSet) http.
 			status = http.StatusServiceUnavailable
 		} else if natsClient == nil {
 			health["nats"] = "not configured"
+		}
+
+		if h.WorkerPoolHealthy != nil {
+			if !h.WorkerPoolHealthy() {
+				health["workers"] = "no workers connected"
+				health["status"] = "degraded"
+			}
+		} else {
+			health["workers"] = "not configured"
 		}
 
 		JSON(w, status, health)

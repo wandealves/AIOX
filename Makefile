@@ -1,4 +1,4 @@
-.PHONY: build dev run test test-integration up down migrate-up migrate-down migrate-create lint clean
+.PHONY: build dev run test test-integration up down migrate-up migrate-down migrate-create lint clean proto
 
 # Variables
 APP_NAME=aiox-api
@@ -52,6 +52,13 @@ test-coverage:
 # Lint
 lint:
 	golangci-lint run ./...
+
+# Proto (generate Go code from .proto files)
+proto:
+	protoc --proto_path=proto/worker/v1 \
+		--go_out=internal/worker/workerpb --go_opt=paths=source_relative \
+		--go-grpc_out=internal/worker/workerpb --go-grpc_opt=paths=source_relative \
+		worker.proto
 
 # Clean
 clean:

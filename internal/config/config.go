@@ -19,7 +19,15 @@ type Config struct {
 	Encryption EncryptionConfig
 	XMPP       XMPPConfig
 	NATS       NATSConfig
+	GRPC       GRPCConfig
 	Log        LogConfig
+}
+
+type GRPCConfig struct {
+	Host           string
+	Port           int
+	WorkerAPIKey   string
+	TaskTimeoutSec int
 }
 
 type ServerConfig struct {
@@ -136,6 +144,12 @@ func Load() (*Config, error) {
 		NATS: NATSConfig{
 			URL: k.String("nats.url"),
 		},
+		GRPC: GRPCConfig{
+			Host:           k.String("grpc.host"),
+			Port:           k.Int("grpc.port"),
+			WorkerAPIKey:   k.String("grpc.worker.api.key"),
+			TaskTimeoutSec: k.Int("grpc.task.timeout.sec"),
+		},
 		Log: LogConfig{
 			Level:  k.String("log.level"),
 			Format: k.String("log.format"),
@@ -190,6 +204,15 @@ func Load() (*Config, error) {
 	}
 	if cfg.NATS.URL == "" {
 		cfg.NATS.URL = "nats://localhost:4222"
+	}
+	if cfg.GRPC.Host == "" {
+		cfg.GRPC.Host = "0.0.0.0"
+	}
+	if cfg.GRPC.Port == 0 {
+		cfg.GRPC.Port = 50051
+	}
+	if cfg.GRPC.TaskTimeoutSec == 0 {
+		cfg.GRPC.TaskTimeoutSec = 120
 	}
 	if cfg.Log.Level == "" {
 		cfg.Log.Level = "debug"

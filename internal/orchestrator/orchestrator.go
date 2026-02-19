@@ -96,28 +96,18 @@ func (o *Orchestrator) processMessage(ctx context.Context, msg jetstream.Msg) {
 		return
 	}
 
-	// Publish task for future Python worker processing (Phase 3)
+	// Publish task for Python worker processing via gRPC dispatcher
 	task := inats.TaskMessage{
 		RequestID:   inbound.ID,
 		AgentID:     route.AgentID,
 		OwnerUserID: route.OwnerUserID,
 		Message:     inbound.Body,
 		FromJID:     inbound.FromJID,
+		AgentJID:    route.AgentJID,
+		AgentName:   route.AgentName,
 	}
 	if err := o.publisher.PublishTask(ctx, route.AgentID.String(), task); err != nil {
 		slog.Error("publishing task", "error", err)
-	}
-
-	// Phase 2 placeholder response — Phase 3 replaces this with AI worker output
-	outbound := inats.OutboundMessage{
-		ID:        uuid.New().String(),
-		ToJID:     inbound.FromJID,
-		FromJID:   route.AgentJID,
-		Body:      "[" + route.AgentName + "] Message received. AI processing will be available in Phase 3.",
-		InReplyTo: inbound.ID,
-	}
-	if err := o.publisher.PublishOutboundMessage(ctx, outbound); err != nil {
-		slog.Error("publishing outbound message", "error", err)
 	}
 
 	// Publish audit event

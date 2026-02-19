@@ -44,13 +44,15 @@ type OutboundMessage struct {
 	InReplyTo string `json:"in_reply_to,omitempty"`
 }
 
-// TaskMessage is published for agent task processing (Phase 3: Python workers).
+// TaskMessage is published for agent task processing via Python workers.
 type TaskMessage struct {
 	RequestID   string    `json:"request_id"`
 	AgentID     uuid.UUID `json:"agent_id"`
 	OwnerUserID uuid.UUID `json:"owner_user_id"`
 	Message     string    `json:"message"`
 	FromJID     string    `json:"from_jid"`
+	AgentJID    string    `json:"agent_jid"`
+	AgentName   string    `json:"agent_name"`
 }
 
 // AgentEvent is published for agent lifecycle events.

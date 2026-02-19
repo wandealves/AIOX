@@ -1,0 +1,6 @@
+grpcio>=1.68.0
+grpcio-tools>=1.68.0
+protobuf>=5.29.0
+openai>=1.58.0
+anthropic>=0.40.0
+httpx>=0.28.0

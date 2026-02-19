@@ -61,6 +61,26 @@ services:
       timeout: 10s
       retries: 5
 
+  aiox-worker:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    container_name: aiox-worker
+    environment:
+      WORKER_ID: worker-1
+      GRPC_HOST: host.docker.internal
+      GRPC_PORT: 50051
+      GRPC_WORKER_API_KEY: ${GRPC_WORKER_API_KEY:-}
+      MAX_CONCURRENT: 4
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   redis_data:

@@ -2,9 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"sync"
+
+	"google.golang.org/grpc"
 
 	"github.com/aiox-platform/aiox/internal/agents"
 	"github.com/aiox-platform/aiox/internal/api"
@@ -16,6 +20,8 @@ import (
 	iredis "github.com/aiox-platform/aiox/internal/redis"
 	"github.com/aiox-platform/aiox/internal/server"
 	"github.com/aiox-platform/aiox/internal/users"
+	"github.com/aiox-platform/aiox/internal/worker"
+	pb "github.com/aiox-platform/aiox/internal/worker/workerpb"
 	ixmpp "github.com/aiox-platform/aiox/internal/xmpp"
 )
 
@@ -92,6 +98,28 @@ func main() {
 	// Outbound relay: NATS → XMPP
 	outboundRelay := ixmpp.NewOutboundRelay(xmppHandler, xmppComp.Sender(), consumerMgr)
 
+	// Worker pool + gRPC server
+	workerPool := worker.NewPool()
+	workerRepo := worker.NewRepository(pool)
+	grpcWorkerServer := worker.NewServer(workerPool, workerRepo)
+
+	var grpcServerOpts []grpc.ServerOption
+	if cfg.GRPC.WorkerAPIKey != "" {
+		grpcServerOpts = append(grpcServerOpts,
+			grpc.UnaryInterceptor(worker.UnaryAuthInterceptor(cfg.GRPC.WorkerAPIKey)),
+			grpc.StreamInterceptor(worker.StreamAuthInterceptor(cfg.GRPC.WorkerAPIKey)),
+		)
+	}
+	grpcSrv := grpc.NewServer(grpcServerOpts...)
+	pb.RegisterWorkerServiceServer(grpcSrv, grpcWorkerServer)
+
+	// Task dispatcher: NATS tasks → gRPC workers → outbound messages
+	dispatcher := worker.NewDispatcher(
+		workerPool, publisher, consumerMgr,
+		agentSvc, workerRepo, grpcWorkerServer.ResultChannel(),
+		cfg.GRPC.TaskTimeoutSec,
+	)
+
 	// Router
 	router := api.NewRouter(pool, natsClient, api.HandlerSet{
 		Register: authHandler.Register,
@@ -107,6 +135,8 @@ func main() {
 		OwnershipMiddleware: agentHandler.OwnershipMiddleware,
 
 		AuthMiddleware: auth.Middleware(authSvc),
+
+		WorkerPoolHealthy: func() bool { return workerPool.ConnectedCount() > 0 },
 	})
 
 	// Start background goroutines
@@ -139,6 +169,30 @@ func main() {
 		}
 	}()
 
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		addr := fmt.Sprintf("%s:%d", cfg.GRPC.Host, cfg.GRPC.Port)
+		lis, err := net.Listen("tcp", addr)
+		if err != nil {
+			slog.Error("gRPC listen error", "error", err)
+			return
+		}
+		slog.Info("starting gRPC server", "addr", addr)
+		if err := grpcSrv.Serve(lis); err != nil {
+			slog.Error("gRPC server error", "error", err)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		slog.Info("starting task dispatcher")
+		if err := dispatcher.Start(ctx); err != nil {
+			slog.Error("task dispatcher error", "error", err)
+		}
+	}()
+
 	// Start HTTP server (blocks until shutdown signal)
 	srv := server.New(cfg.Server, router)
 	if err := srv.Start(); err != nil {
@@ -147,6 +201,7 @@ func main() {
 
 	// Shutdown: cancel context to stop all goroutines
 	cancel()
+	grpcSrv.GracefulStop()
 	slog.Info("waiting for goroutines to finish")
 	wg.Wait()
 	slog.Info("all goroutines stopped, shutting down")
