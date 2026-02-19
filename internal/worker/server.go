@@ -132,10 +132,12 @@ func (s *Server) TaskStream(stream grpc.BidiStreamingServer[pb.WorkerMessage, pb
 		s.resultCh <- resp
 	}
 
-	// Cleanup on disconnect
+	// Cleanup on disconnect.
+	// Use context.Background() because stream.Context() is already cancelled
+	// by the time we reach here.
 	s.pool.Unregister(reg.WorkerId)
 	if s.repo != nil {
-		if err := s.repo.MarkWorkerOffline(stream.Context(), reg.WorkerId); err != nil {
+		if err := s.repo.MarkWorkerOffline(context.Background(), reg.WorkerId); err != nil {
 			slog.Error("marking worker offline", "error", err)
 		}
 	}

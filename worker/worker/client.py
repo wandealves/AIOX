@@ -75,8 +75,15 @@ class WorkerClient:
             )
             await stream.write(register_msg)
 
-            # Wait for ack
+            # Wait for ack — use stream.read() consistently.
+            # NOTE: mixing stream.read() with "async for stream" on the same
+            # RPC raises "iterator and read/write APIs may not be mixed".
+            # We therefore use stream.read() throughout.
             server_msg = await stream.read()
+            if server_msg == grpc.aio.EOF:
+                logger.error("Server closed stream before sending RegisterAck")
+                return
+
             ack = server_msg.register_ack
             if not ack.accepted:
                 logger.error("Registration rejected: %s", ack.message)
@@ -89,9 +96,13 @@ class WorkerClient:
                 self._heartbeat_loop(stub, metadata)
             )
 
-            # Process incoming tasks
+            # Process incoming tasks using stream.read() (not async for)
             try:
-                async for server_msg in stream:
+                while True:
+                    server_msg = await stream.read()
+                    if server_msg == grpc.aio.EOF:
+                        logger.info("Server closed stream (EOF)")
+                        break
                     task_req = server_msg.task_request
                     if task_req and task_req.request_id:
                         asyncio.create_task(
