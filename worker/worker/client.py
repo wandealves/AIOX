@@ -7,9 +7,11 @@ import tracemalloc
 import grpc
 
 from .config import Config
+from .embedding import EmbeddingService
 from .llm.base import LLMProvider, LLMResponse
 from .llm.openai import OpenAIProvider
 from .llm.anthropic import AnthropicProvider
+from .memory import MemoryConfig, MemoryContext
 
 # Import generated protobuf modules
 from . import worker_pb2
@@ -26,6 +28,7 @@ class WorkerClient:
         self.providers: dict[str, LLMProvider] = {}
         self._setup_providers()
         self.semaphore = asyncio.Semaphore(config.max_concurrent)
+        self.embedding_svc = EmbeddingService()
 
     def _setup_providers(self):
         if self.config.openai_api_key:
@@ -105,7 +108,7 @@ class WorkerClient:
             await channel.close()
 
     async def _process_task(self, stream, task_req):
-        """Process a single task with concurrency limiting."""
+        """Process a single task with concurrency limiting and memory support."""
         async with self.semaphore:
             logger.info(
                 "Processing task %s for agent %s",
@@ -113,7 +116,38 @@ class WorkerClient:
                 task_req.agent_id,
             )
 
-            response = await self._call_llm(task_req)
+            # Parse memory context and config
+            mem_config = MemoryConfig.from_json(task_req.memory_config_json)
+            mem_context = MemoryContext.from_json(task_req.memory_context_json)
+
+            # Build messages array with memory context if enabled
+            messages = None
+            if mem_config.enabled and (mem_context.recent_messages or mem_context.relevant_memories):
+                messages = mem_context.build_messages_for_llm(
+                    task_req.system_prompt, task_req.user_message
+                )
+
+            response = await self._call_llm(task_req, messages=messages)
+
+            # Generate embedding for user message if long-term memory is enabled
+            new_memories = []
+            if mem_config.enabled and mem_config.long_term_enabled and not response.error:
+                try:
+                    embedding = self.embedding_svc.embed(task_req.user_message)
+                    new_memories.append(
+                        worker_pb2.MemoryEntry(
+                            content=task_req.user_message,
+                            embedding=embedding,
+                            memory_type="conversation",
+                            metadata_json=json.dumps({
+                                "source": "user_message",
+                                "request_id": task_req.request_id,
+                                "agent_id": task_req.agent_id,
+                            }),
+                        )
+                    )
+                except Exception as e:
+                    logger.warning("Failed to generate embedding: %s", e)
 
             result_msg = worker_pb2.WorkerMessage(
                 task_response=worker_pb2.TaskResponse(
@@ -124,18 +158,22 @@ class WorkerClient:
                     duration_ms=response.duration_ms,
                     model_used=response.model_used,
                     error_message=response.error,
+                    new_memories=new_memories,
                 )
             )
             await stream.write(result_msg)
 
             logger.info(
-                "Task %s completed: %d tokens, %dms",
+                "Task %s completed: %d tokens, %dms, %d new memories",
                 task_req.request_id,
                 response.tokens_used,
                 response.duration_ms,
+                len(new_memories),
             )
 
-    async def _call_llm(self, task_req) -> LLMResponse:
+    async def _call_llm(
+        self, task_req, messages: list[dict] | None = None
+    ) -> LLMResponse:
         """Call the appropriate LLM provider based on agent's llm_config."""
         try:
             llm_config = json.loads(task_req.llm_config_json) if task_req.llm_config_json else {}
@@ -163,6 +201,7 @@ class WorkerClient:
             model=model,
             temperature=temperature,
             max_tokens=max_tokens,
+            messages=messages,
         )
 
     async def _heartbeat_loop(self, stub, metadata):

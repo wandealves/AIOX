@@ -28,6 +28,13 @@ type HandlerSet struct {
 	DeleteAgent          http.HandlerFunc
 	OwnershipMiddleware  func(http.Handler) http.Handler
 
+	// Memory handlers (Phase 4)
+	ListMemories      http.HandlerFunc
+	CreateMemory      http.HandlerFunc
+	SearchMemories    http.HandlerFunc
+	DeleteMemory      http.HandlerFunc
+	DeleteAllMemories http.HandlerFunc
+
 	// Auth middleware
 	AuthMiddleware func(http.Handler) http.Handler
 
@@ -110,6 +117,15 @@ func NewRouter(pool *pgxpool.Pool, natsClient *inats.Client, h HandlerSet) http.
 					r.Get("/", h.GetAgent)
 					r.Put("/", h.UpdateAgent)
 					r.Delete("/", h.DeleteAgent)
+
+					// Memory routes (Phase 4)
+					r.Route("/memories", func(r chi.Router) {
+						r.Get("/", h.ListMemories)
+						r.Post("/", h.CreateMemory)
+						r.Post("/search", h.SearchMemories)
+						r.Delete("/", h.DeleteAllMemories)
+						r.Delete("/{memoryID}", h.DeleteMemory)
+					})
 				})
 			})
 		})

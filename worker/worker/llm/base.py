@@ -23,6 +23,11 @@ class LLMProvider(ABC):
         model: str = "",
         temperature: float = 0.7,
         max_tokens: int = 1024,
+        messages: list[dict] | None = None,
     ) -> LLMResponse:
-        """Generate a response from the LLM."""
+        """Generate a response from the LLM.
+
+        If `messages` is provided, use the full messages array (with conversation
+        history and memory context) instead of just system_prompt + user_message.
+        """
         ...

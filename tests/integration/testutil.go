@@ -26,6 +26,7 @@ import (
 	"github.com/aiox-platform/aiox/internal/agents"
 	"github.com/aiox-platform/aiox/internal/api"
 	"github.com/aiox-platform/aiox/internal/auth"
+	"github.com/aiox-platform/aiox/internal/memory"
 	"github.com/aiox-platform/aiox/internal/users"
 )
 
@@ -135,6 +136,12 @@ func SetupTestEnv(t *testing.T) *TestEnv {
 	agentSvc := agents.NewService(agentRepo, encryptionKey, xmppDomain)
 	agentHandler := agents.NewHandler(agentSvc)
 
+	// Memory (Phase 4)
+	memoryRepo := memory.NewPostgresRepository(pool)
+	shortTermStore := memory.NewShortTermStore(redisClient)
+	memorySvc := memory.NewService(memoryRepo, shortTermStore)
+	memoryHandler := memory.NewHandler(memorySvc)
+
 	router := api.NewRouter(pool, nil, api.HandlerSet{
 		Register: authHandler.Register,
 		Login:    authHandler.Login,
@@ -147,6 +154,12 @@ func SetupTestEnv(t *testing.T) *TestEnv {
 		UpdateAgent:         agentHandler.Update,
 		DeleteAgent:         agentHandler.Delete,
 		OwnershipMiddleware: agentHandler.OwnershipMiddleware,
+
+		ListMemories:      memoryHandler.List,
+		CreateMemory:      memoryHandler.Create,
+		SearchMemories:    memoryHandler.Search,
+		DeleteMemory:      memoryHandler.Delete,
+		DeleteAllMemories: memoryHandler.DeleteAll,
 
 		AuthMiddleware: auth.Middleware(authSvc),
 	})

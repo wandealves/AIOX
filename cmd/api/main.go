@@ -15,6 +15,7 @@ import (
 	"github.com/aiox-platform/aiox/internal/auth"
 	"github.com/aiox-platform/aiox/internal/config"
 	"github.com/aiox-platform/aiox/internal/database"
+	"github.com/aiox-platform/aiox/internal/memory"
 	inats "github.com/aiox-platform/aiox/internal/nats"
 	"github.com/aiox-platform/aiox/internal/orchestrator"
 	iredis "github.com/aiox-platform/aiox/internal/redis"
@@ -78,6 +79,12 @@ func main() {
 	agentSvc := agents.NewService(agentRepo, cfg.Encryption.Key, cfg.XMPP.Domain)
 	agentHandler := agents.NewHandler(agentSvc)
 
+	// Memory (Phase 4)
+	memoryRepo := memory.NewPostgresRepository(pool)
+	shortTermStore := memory.NewShortTermStore(redisClient)
+	memorySvc := memory.NewService(memoryRepo, shortTermStore)
+	memoryHandler := memory.NewHandler(memorySvc)
+
 	// NATS publisher and consumer manager
 	publisher := inats.NewPublisher(natsClient.JetStream())
 	consumerMgr := inats.NewConsumerManager(natsClient.JetStream())
@@ -116,7 +123,7 @@ func main() {
 	// Task dispatcher: NATS tasks → gRPC workers → outbound messages
 	dispatcher := worker.NewDispatcher(
 		workerPool, publisher, consumerMgr,
-		agentSvc, workerRepo, grpcWorkerServer.ResultChannel(),
+		agentSvc, workerRepo, memorySvc, grpcWorkerServer.ResultChannel(),
 		cfg.GRPC.TaskTimeoutSec,
 	)
 
@@ -133,6 +140,12 @@ func main() {
 		UpdateAgent:         agentHandler.Update,
 		DeleteAgent:         agentHandler.Delete,
 		OwnershipMiddleware: agentHandler.OwnershipMiddleware,
+
+		ListMemories:      memoryHandler.List,
+		CreateMemory:      memoryHandler.Create,
+		SearchMemories:    memoryHandler.Search,
+		DeleteMemory:      memoryHandler.Delete,
+		DeleteAllMemories: memoryHandler.DeleteAll,
 
 		AuthMiddleware: auth.Middleware(authSvc),
 

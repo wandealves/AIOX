@@ -14,6 +14,9 @@ RUN python -m grpc_tools.protoc \
     --grpc_python_out=/app/worker \
     /tmp/worker.proto
 
+# Pre-download embedding model at build time
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
+
 # Copy worker source
 COPY worker/worker/ /app/worker/
 

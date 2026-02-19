@@ -21,18 +21,23 @@ class OpenAIProvider(LLMProvider):
         model: str = "",
         temperature: float = 0.7,
         max_tokens: int = 1024,
+        messages: list[dict] | None = None,
     ) -> LLMResponse:
         if not model:
             model = "gpt-4o-mini"
+
+        # Use full messages array if provided, otherwise build simple two-message array
+        if messages is None:
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ]
 
         start = time.monotonic()
         try:
             response = await self.client.chat.completions.create(
                 model=model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message},
-                ],
+                messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
             )

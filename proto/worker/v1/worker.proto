@@ -54,6 +54,8 @@ message TaskRequest {
   string from_jid = 7;
   string agent_jid = 8;
   string agent_name = 9;
+  string memory_context_json = 10; // JSON: recent messages + relevant long-term memories
+  string memory_config_json = 11;  // JSON: memory configuration from agent
 }
 
 // TaskResponse is sent from the worker back to the server with the LLM result.
@@ -65,6 +67,15 @@ message TaskResponse {
   int32 duration_ms = 5;
   string model_used = 6;
   string error_message = 7;       // Non-empty indicates failure
+  repeated MemoryEntry new_memories = 8; // New memories to persist (with embeddings from Python)
+}
+
+// MemoryEntry represents a memory to be stored, with its embedding vector.
+message MemoryEntry {
+  string content = 1;
+  repeated float embedding = 2;   // 384-dim vector from sentence-transformers
+  string memory_type = 3;         // e.g., "conversation", "fact", "preference"
+  string metadata_json = 4;       // Optional JSON metadata
 }
 
 // HeartbeatRequest is a periodic health check from the worker.

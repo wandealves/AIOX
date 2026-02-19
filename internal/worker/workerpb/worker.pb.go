@@ -303,18 +303,20 @@ func (x *RegisterAck) GetMessage() string {
 
 // TaskRequest is sent from the server to a worker to process a task.
 type TaskRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	AgentId       string                 `protobuf:"bytes,2,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
-	OwnerUserId   string                 `protobuf:"bytes,3,opt,name=owner_user_id,json=ownerUserId,proto3" json:"owner_user_id,omitempty"`
-	UserMessage   string                 `protobuf:"bytes,4,opt,name=user_message,json=userMessage,proto3" json:"user_message,omitempty"`
-	SystemPrompt  string                 `protobuf:"bytes,5,opt,name=system_prompt,json=systemPrompt,proto3" json:"system_prompt,omitempty"`      // Decrypted system prompt
-	LlmConfigJson string                 `protobuf:"bytes,6,opt,name=llm_config_json,json=llmConfigJson,proto3" json:"llm_config_json,omitempty"` // JSON: {"provider":"openai","model":"gpt-4o-mini","temperature":0.7,"max_tokens":1024}
-	FromJid       string                 `protobuf:"bytes,7,opt,name=from_jid,json=fromJid,proto3" json:"from_jid,omitempty"`
-	AgentJid      string                 `protobuf:"bytes,8,opt,name=agent_jid,json=agentJid,proto3" json:"agent_jid,omitempty"`
-	AgentName     string                 `protobuf:"bytes,9,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	RequestId         string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	AgentId           string                 `protobuf:"bytes,2,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	OwnerUserId       string                 `protobuf:"bytes,3,opt,name=owner_user_id,json=ownerUserId,proto3" json:"owner_user_id,omitempty"`
+	UserMessage       string                 `protobuf:"bytes,4,opt,name=user_message,json=userMessage,proto3" json:"user_message,omitempty"`
+	SystemPrompt      string                 `protobuf:"bytes,5,opt,name=system_prompt,json=systemPrompt,proto3" json:"system_prompt,omitempty"`      // Decrypted system prompt
+	LlmConfigJson     string                 `protobuf:"bytes,6,opt,name=llm_config_json,json=llmConfigJson,proto3" json:"llm_config_json,omitempty"` // JSON: {"provider":"openai","model":"gpt-4o-mini","temperature":0.7,"max_tokens":1024}
+	FromJid           string                 `protobuf:"bytes,7,opt,name=from_jid,json=fromJid,proto3" json:"from_jid,omitempty"`
+	AgentJid          string                 `protobuf:"bytes,8,opt,name=agent_jid,json=agentJid,proto3" json:"agent_jid,omitempty"`
+	AgentName         string                 `protobuf:"bytes,9,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
+	MemoryContextJson string                 `protobuf:"bytes,10,opt,name=memory_context_json,json=memoryContextJson,proto3" json:"memory_context_json,omitempty"` // JSON: recent messages + relevant long-term memories
+	MemoryConfigJson  string                 `protobuf:"bytes,11,opt,name=memory_config_json,json=memoryConfigJson,proto3" json:"memory_config_json,omitempty"`    // JSON: memory configuration from agent
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *TaskRequest) Reset() {
@@ -410,6 +412,20 @@ func (x *TaskRequest) GetAgentName() string {
 	return ""
 }
 
+func (x *TaskRequest) GetMemoryContextJson() string {
+	if x != nil {
+		return x.MemoryContextJson
+	}
+	return ""
+}
+
+func (x *TaskRequest) GetMemoryConfigJson() string {
+	if x != nil {
+		return x.MemoryConfigJson
+	}
+	return ""
+}
+
 // TaskResponse is sent from the worker back to the server with the LLM result.
 type TaskResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -420,6 +436,7 @@ type TaskResponse struct {
 	DurationMs    int32                  `protobuf:"varint,5,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
 	ModelUsed     string                 `protobuf:"bytes,6,opt,name=model_used,json=modelUsed,proto3" json:"model_used,omitempty"`
 	ErrorMessage  string                 `protobuf:"bytes,7,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"` // Non-empty indicates failure
+	NewMemories   []*MemoryEntry         `protobuf:"bytes,8,rep,name=new_memories,json=newMemories,proto3" json:"new_memories,omitempty"`    // New memories to persist (with embeddings from Python)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -503,6 +520,82 @@ func (x *TaskResponse) GetErrorMessage() string {
 	return ""
 }
 
+func (x *TaskResponse) GetNewMemories() []*MemoryEntry {
+	if x != nil {
+		return x.NewMemories
+	}
+	return nil
+}
+
+// MemoryEntry represents a memory to be stored, with its embedding vector.
+type MemoryEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Content       string                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
+	Embedding     []float32              `protobuf:"fixed32,2,rep,packed,name=embedding,proto3" json:"embedding,omitempty"`                  // 384-dim vector from sentence-transformers
+	MemoryType    string                 `protobuf:"bytes,3,opt,name=memory_type,json=memoryType,proto3" json:"memory_type,omitempty"`       // e.g., "conversation", "fact", "preference"
+	MetadataJson  string                 `protobuf:"bytes,4,opt,name=metadata_json,json=metadataJson,proto3" json:"metadata_json,omitempty"` // Optional JSON metadata
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MemoryEntry) Reset() {
+	*x = MemoryEntry{}
+	mi := &file_worker_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MemoryEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MemoryEntry) ProtoMessage() {}
+
+func (x *MemoryEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MemoryEntry.ProtoReflect.Descriptor instead.
+func (*MemoryEntry) Descriptor() ([]byte, []int) {
+	return file_worker_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *MemoryEntry) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *MemoryEntry) GetEmbedding() []float32 {
+	if x != nil {
+		return x.Embedding
+	}
+	return nil
+}
+
+func (x *MemoryEntry) GetMemoryType() string {
+	if x != nil {
+		return x.MemoryType
+	}
+	return ""
+}
+
+func (x *MemoryEntry) GetMetadataJson() string {
+	if x != nil {
+		return x.MetadataJson
+	}
+	return ""
+}
+
 // HeartbeatRequest is a periodic health check from the worker.
 type HeartbeatRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -516,7 +609,7 @@ type HeartbeatRequest struct {
 
 func (x *HeartbeatRequest) Reset() {
 	*x = HeartbeatRequest{}
-	mi := &file_worker_proto_msgTypes[6]
+	mi := &file_worker_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -528,7 +621,7 @@ func (x *HeartbeatRequest) String() string {
 func (*HeartbeatRequest) ProtoMessage() {}
 
 func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_proto_msgTypes[6]
+	mi := &file_worker_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -541,7 +634,7 @@ func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatRequest.ProtoReflect.Descriptor instead.
 func (*HeartbeatRequest) Descriptor() ([]byte, []int) {
-	return file_worker_proto_rawDescGZIP(), []int{6}
+	return file_worker_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *HeartbeatRequest) GetWorkerId() string {
@@ -582,7 +675,7 @@ type HeartbeatResponse struct {
 
 func (x *HeartbeatResponse) Reset() {
 	*x = HeartbeatResponse{}
-	mi := &file_worker_proto_msgTypes[7]
+	mi := &file_worker_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -594,7 +687,7 @@ func (x *HeartbeatResponse) String() string {
 func (*HeartbeatResponse) ProtoMessage() {}
 
 func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_proto_msgTypes[7]
+	mi := &file_worker_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -607,7 +700,7 @@ func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatResponse.ProtoReflect.Descriptor instead.
 func (*HeartbeatResponse) Descriptor() ([]byte, []int) {
-	return file_worker_proto_rawDescGZIP(), []int{7}
+	return file_worker_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *HeartbeatResponse) GetOk() bool {
@@ -636,7 +729,7 @@ const file_worker_proto_rawDesc = "" +
 	"\x13supported_providers\x18\x03 \x03(\tR\x12supportedProviders\"C\n" +
 	"\vRegisterAck\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\bR\baccepted\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\xb2\x02\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\x90\x03\n" +
 	"\vTaskRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x19\n" +
@@ -648,7 +741,10 @@ const file_worker_proto_rawDesc = "" +
 	"\bfrom_jid\x18\a \x01(\tR\afromJid\x12\x1b\n" +
 	"\tagent_jid\x18\b \x01(\tR\bagentJid\x12\x1d\n" +
 	"\n" +
-	"agent_name\x18\t \x01(\tR\tagentName\"\xf5\x01\n" +
+	"agent_name\x18\t \x01(\tR\tagentName\x12.\n" +
+	"\x13memory_context_json\x18\n" +
+	" \x01(\tR\x11memoryContextJson\x12,\n" +
+	"\x12memory_config_json\x18\v \x01(\tR\x10memoryConfigJson\"\xb0\x02\n" +
 	"\fTaskResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1b\n" +
@@ -660,7 +756,14 @@ const file_worker_proto_rawDesc = "" +
 	"durationMs\x12\x1d\n" +
 	"\n" +
 	"model_used\x18\x06 \x01(\tR\tmodelUsed\x12#\n" +
-	"\rerror_message\x18\a \x01(\tR\ferrorMessage\"\xa0\x01\n" +
+	"\rerror_message\x18\a \x01(\tR\ferrorMessage\x129\n" +
+	"\fnew_memories\x18\b \x03(\v2\x16.worker.v1.MemoryEntryR\vnewMemories\"\x8b\x01\n" +
+	"\vMemoryEntry\x12\x18\n" +
+	"\acontent\x18\x01 \x01(\tR\acontent\x12\x1c\n" +
+	"\tembedding\x18\x02 \x03(\x02R\tembedding\x12\x1f\n" +
+	"\vmemory_type\x18\x03 \x01(\tR\n" +
+	"memoryType\x12#\n" +
+	"\rmetadata_json\x18\x04 \x01(\tR\fmetadataJson\"\xa0\x01\n" +
 	"\x10HeartbeatRequest\x12\x1b\n" +
 	"\tworker_id\x18\x01 \x01(\tR\bworkerId\x12!\n" +
 	"\factive_tasks\x18\x02 \x01(\x05R\vactiveTasks\x12&\n" +
@@ -685,7 +788,7 @@ func file_worker_proto_rawDescGZIP() []byte {
 	return file_worker_proto_rawDescData
 }
 
-var file_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_worker_proto_goTypes = []any{
 	(*WorkerMessage)(nil),     // 0: worker.v1.WorkerMessage
 	(*ServerMessage)(nil),     // 1: worker.v1.ServerMessage
@@ -693,23 +796,25 @@ var file_worker_proto_goTypes = []any{
 	(*RegisterAck)(nil),       // 3: worker.v1.RegisterAck
 	(*TaskRequest)(nil),       // 4: worker.v1.TaskRequest
 	(*TaskResponse)(nil),      // 5: worker.v1.TaskResponse
-	(*HeartbeatRequest)(nil),  // 6: worker.v1.HeartbeatRequest
-	(*HeartbeatResponse)(nil), // 7: worker.v1.HeartbeatResponse
+	(*MemoryEntry)(nil),       // 6: worker.v1.MemoryEntry
+	(*HeartbeatRequest)(nil),  // 7: worker.v1.HeartbeatRequest
+	(*HeartbeatResponse)(nil), // 8: worker.v1.HeartbeatResponse
 }
 var file_worker_proto_depIdxs = []int32{
 	2, // 0: worker.v1.WorkerMessage.register:type_name -> worker.v1.RegisterWorker
 	5, // 1: worker.v1.WorkerMessage.task_response:type_name -> worker.v1.TaskResponse
 	3, // 2: worker.v1.ServerMessage.register_ack:type_name -> worker.v1.RegisterAck
 	4, // 3: worker.v1.ServerMessage.task_request:type_name -> worker.v1.TaskRequest
-	0, // 4: worker.v1.WorkerService.TaskStream:input_type -> worker.v1.WorkerMessage
-	6, // 5: worker.v1.WorkerService.Heartbeat:input_type -> worker.v1.HeartbeatRequest
-	1, // 6: worker.v1.WorkerService.TaskStream:output_type -> worker.v1.ServerMessage
-	7, // 7: worker.v1.WorkerService.Heartbeat:output_type -> worker.v1.HeartbeatResponse
-	6, // [6:8] is the sub-list for method output_type
-	4, // [4:6] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	6, // 4: worker.v1.TaskResponse.new_memories:type_name -> worker.v1.MemoryEntry
+	0, // 5: worker.v1.WorkerService.TaskStream:input_type -> worker.v1.WorkerMessage
+	7, // 6: worker.v1.WorkerService.Heartbeat:input_type -> worker.v1.HeartbeatRequest
+	1, // 7: worker.v1.WorkerService.TaskStream:output_type -> worker.v1.ServerMessage
+	8, // 8: worker.v1.WorkerService.Heartbeat:output_type -> worker.v1.HeartbeatResponse
+	7, // [7:9] is the sub-list for method output_type
+	5, // [5:7] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_worker_proto_init() }
@@ -731,7 +836,7 @@ func file_worker_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_worker_proto_rawDesc), len(file_worker_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

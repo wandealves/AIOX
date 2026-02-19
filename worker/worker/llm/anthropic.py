@@ -21,19 +21,30 @@ class AnthropicProvider(LLMProvider):
         model: str = "",
         temperature: float = 0.7,
         max_tokens: int = 1024,
+        messages: list[dict] | None = None,
     ) -> LLMResponse:
         if not model:
             model = "claude-sonnet-4-20250514"
+
+        # For Anthropic, extract system from messages[0] if full messages provided
+        system = system_prompt
+        chat_messages = [{"role": "user", "content": user_message}]
+        if messages is not None:
+            system = ""
+            chat_messages = []
+            for msg in messages:
+                if msg["role"] == "system":
+                    system = msg["content"]
+                else:
+                    chat_messages.append(msg)
 
         start = time.monotonic()
         try:
             response = await self.client.messages.create(
                 model=model,
                 max_tokens=max_tokens,
-                system=system_prompt,
-                messages=[
-                    {"role": "user", "content": user_message},
-                ],
+                system=system,
+                messages=chat_messages,
                 temperature=temperature,
             )
             duration_ms = int((time.monotonic() - start) * 1000)
