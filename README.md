@@ -450,9 +450,8 @@ Content-Type: application/json
     "max_tokens": 1024
   },
   "memory_config": {
-    "short_term_limit": 20,
-    "long_term_enabled": true,
-    "long_term_limit": 10
+    "enabled": true,
+    "max_short_term_msgs": 20
   },
   "governance": {
     "blocked": false,
