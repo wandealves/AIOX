@@ -32,7 +32,12 @@ coverage.html
 postgres_data/
 redis_data/
 
+# TLS certificates (generated locally, contain private keys)
+docker/ejabberd/certs/
+
 # Build
 /tmp/
 
 .claude
+
+CLAUDE.md

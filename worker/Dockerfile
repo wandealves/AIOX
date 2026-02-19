@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy proto and generate Python code
 COPY proto/worker/v1/worker.proto /tmp/worker.proto
+RUN mkdir -p /app/worker
 RUN python -m grpc_tools.protoc \
     -I/tmp \
     --python_out=/app/worker \

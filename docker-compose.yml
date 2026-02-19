@@ -57,6 +57,7 @@ services:
       - "5280:5280"
     volumes:
       - ./docker/ejabberd/ejabberd.yml:/home/ejabberd/conf/ejabberd.yml
+      - ./docker/ejabberd/certs:/home/ejabberd/conf/certs:ro
       - ejabberd_data:/home/ejabberd/database
     healthcheck:
       test: ["CMD", "ejabberdctl", "status"]

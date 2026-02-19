@@ -3,6 +3,9 @@ loglevel: info
 hosts:
   - aiox.local
 
+certfiles:
+  - /home/ejabberd/conf/certs/server.pem
+
 listen:
   - port: 5222
     ip: "::"
@@ -10,7 +13,7 @@ listen:
     max_stanza_size: 262144
     shaper: c2s_shaper
     access: c2s
-    starttls: false
+    starttls: true
 
   - port: 5275
     ip: "::"
