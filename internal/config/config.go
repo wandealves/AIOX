@@ -20,7 +20,14 @@ type Config struct {
 	XMPP       XMPPConfig
 	NATS       NATSConfig
 	GRPC       GRPCConfig
+	Governance GovernanceCfg
 	Log        LogConfig
+}
+
+type GovernanceCfg struct {
+	MaxTokensPerDay    int
+	MaxTokensPerMinute int
+	MaxRequestsPerDay  int
 }
 
 type GRPCConfig struct {
@@ -150,6 +157,11 @@ func Load() (*Config, error) {
 			WorkerAPIKey:   k.String("grpc.worker.api.key"),
 			TaskTimeoutSec: k.Int("grpc.task.timeout.sec"),
 		},
+		Governance: GovernanceCfg{
+			MaxTokensPerDay:    k.Int("governance.max.tokens.per.day"),
+			MaxTokensPerMinute: k.Int("governance.max.tokens.per.minute"),
+			MaxRequestsPerDay:  k.Int("governance.max.requests.per.day"),
+		},
 		Log: LogConfig{
 			Level:  k.String("log.level"),
 			Format: k.String("log.format"),
@@ -213,6 +225,15 @@ func Load() (*Config, error) {
 	}
 	if cfg.GRPC.TaskTimeoutSec == 0 {
 		cfg.GRPC.TaskTimeoutSec = 120
+	}
+	if cfg.Governance.MaxTokensPerDay == 0 {
+		cfg.Governance.MaxTokensPerDay = 100000
+	}
+	if cfg.Governance.MaxTokensPerMinute == 0 {
+		cfg.Governance.MaxTokensPerMinute = 10000
+	}
+	if cfg.Governance.MaxRequestsPerDay == 0 {
+		cfg.Governance.MaxRequestsPerDay = 1000
 	}
 	if cfg.Log.Level == "" {
 		cfg.Log.Level = "debug"

@@ -1,11 +1,12 @@
 package orchestrator
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
+
+	"github.com/aiox-platform/aiox/internal/governance"
 )
 
 // Validator checks ownership and governance rules for message routing.
@@ -36,19 +37,16 @@ func (v *Validator) ValidateOwnership(fromUserID, ownerUserID uuid.UUID) error {
 	return nil
 }
 
-// governanceConfig represents the governance JSONB structure.
-type governanceConfig struct {
-	AllowedDomains []string `json:"allowed_domains,omitempty"`
-}
-
 func (v *Validator) checkGovernance(route *RouteResult) error {
 	if len(route.Governance) == 0 || string(route.Governance) == "null" {
 		return nil
 	}
 
-	var gov governanceConfig
-	if err := json.Unmarshal(route.Governance, &gov); err != nil {
-		return fmt.Errorf("parsing governance config: %w", err)
+	gov := governance.ParseGovernance(route.Governance)
+
+	// Check if agent is blocked
+	if gov.Blocked {
+		return fmt.Errorf("agent is blocked by governance policy")
 	}
 
 	// If allowed_domains is configured, validate the agent's JID domain

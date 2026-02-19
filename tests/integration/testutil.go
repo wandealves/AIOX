@@ -26,6 +26,10 @@ import (
 	"github.com/aiox-platform/aiox/internal/agents"
 	"github.com/aiox-platform/aiox/internal/api"
 	"github.com/aiox-platform/aiox/internal/auth"
+	"github.com/aiox-platform/aiox/internal/config"
+	"github.com/aiox-platform/aiox/internal/governance"
+	"github.com/aiox-platform/aiox/internal/governance/audit"
+	"github.com/aiox-platform/aiox/internal/governance/quota"
 	"github.com/aiox-platform/aiox/internal/memory"
 	"github.com/aiox-platform/aiox/internal/users"
 )
@@ -142,6 +146,18 @@ func SetupTestEnv(t *testing.T) *TestEnv {
 	memorySvc := memory.NewService(memoryRepo, shortTermStore)
 	memoryHandler := memory.NewHandler(memorySvc)
 
+	// Governance (Phase 5)
+	quotaRepo := quota.NewRepository(pool)
+	rateLimiter := quota.NewRateLimiter(redisClient)
+	govCfg := config.GovernanceCfg{
+		MaxTokensPerDay:    100000,
+		MaxTokensPerMinute: 10000,
+		MaxRequestsPerDay:  1000,
+	}
+	quotaSvc := quota.NewService(quotaRepo, rateLimiter, govCfg)
+	auditRepo := audit.NewRepository(pool)
+	govHandler := governance.NewHandler(quotaSvc, auditRepo)
+
 	router := api.NewRouter(pool, nil, api.HandlerSet{
 		Register: authHandler.Register,
 		Login:    authHandler.Login,
@@ -160,6 +176,10 @@ func SetupTestEnv(t *testing.T) *TestEnv {
 		SearchMemories:    memoryHandler.Search,
 		DeleteMemory:      memoryHandler.Delete,
 		DeleteAllMemories: memoryHandler.DeleteAll,
+
+		GetUserQuota:       govHandler.GetQuota,
+		ListAuditLogs:      govHandler.ListAuditLogs,
+		ListAgentAuditLogs: govHandler.ListAgentAuditLogs,
 
 		AuthMiddleware: auth.Middleware(authSvc),
 	})

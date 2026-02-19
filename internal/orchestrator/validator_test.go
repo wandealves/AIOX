@@ -7,6 +7,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/aiox-platform/aiox/internal/governance"
 )
 
 func TestValidator_Validate(t *testing.T) {
@@ -59,7 +61,7 @@ func TestValidator_Validate(t *testing.T) {
 	})
 
 	t.Run("allowed domain passes", func(t *testing.T) {
-		gov, _ := json.Marshal(governanceConfig{AllowedDomains: []string{"agents.aiox.local"}})
+		gov, _ := json.Marshal(governance.GovernanceConfig{AllowedDomains: []string{"agents.aiox.local"}})
 		route := &RouteResult{
 			AgentID:     uuid.New(),
 			OwnerUserID: uuid.New(),
@@ -70,7 +72,7 @@ func TestValidator_Validate(t *testing.T) {
 	})
 
 	t.Run("disallowed domain fails", func(t *testing.T) {
-		gov, _ := json.Marshal(governanceConfig{AllowedDomains: []string{"other.domain.com"}})
+		gov, _ := json.Marshal(governance.GovernanceConfig{AllowedDomains: []string{"other.domain.com"}})
 		route := &RouteResult{
 			AgentID:     uuid.New(),
 			OwnerUserID: uuid.New(),
@@ -81,7 +83,31 @@ func TestValidator_Validate(t *testing.T) {
 	})
 
 	t.Run("domain check is case insensitive", func(t *testing.T) {
-		gov, _ := json.Marshal(governanceConfig{AllowedDomains: []string{"AGENTS.AIOX.LOCAL"}})
+		gov, _ := json.Marshal(governance.GovernanceConfig{AllowedDomains: []string{"AGENTS.AIOX.LOCAL"}})
+		route := &RouteResult{
+			AgentID:     uuid.New(),
+			OwnerUserID: uuid.New(),
+			AgentJID:    "agent-123@agents.aiox.local",
+			Governance:  gov,
+		}
+		assert.NoError(t, v.Validate(route))
+	})
+
+	t.Run("blocked agent fails", func(t *testing.T) {
+		gov, _ := json.Marshal(governance.GovernanceConfig{Blocked: true})
+		route := &RouteResult{
+			AgentID:     uuid.New(),
+			OwnerUserID: uuid.New(),
+			AgentJID:    "agent-123@agents.aiox.local",
+			Governance:  gov,
+		}
+		err := v.Validate(route)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "blocked")
+	})
+
+	t.Run("blocked false passes", func(t *testing.T) {
+		gov, _ := json.Marshal(governance.GovernanceConfig{Blocked: false})
 		route := &RouteResult{
 			AgentID:     uuid.New(),
 			OwnerUserID: uuid.New(),

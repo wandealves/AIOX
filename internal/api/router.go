@@ -35,6 +35,11 @@ type HandlerSet struct {
 	DeleteMemory      http.HandlerFunc
 	DeleteAllMemories http.HandlerFunc
 
+	// Governance handlers (Phase 5)
+	GetUserQuota       http.HandlerFunc
+	ListAuditLogs      http.HandlerFunc
+	ListAgentAuditLogs http.HandlerFunc
+
 	// Auth middleware
 	AuthMiddleware func(http.Handler) http.Handler
 
@@ -126,7 +131,16 @@ func NewRouter(pool *pgxpool.Pool, natsClient *inats.Client, h HandlerSet) http.
 						r.Delete("/", h.DeleteAllMemories)
 						r.Delete("/{memoryID}", h.DeleteMemory)
 					})
+
+					// Agent audit logs (Phase 5)
+					r.Get("/audit", h.ListAgentAuditLogs)
 				})
+			})
+
+			// Governance routes (Phase 5)
+			r.Route("/governance", func(r chi.Router) {
+				r.Get("/quota", h.GetUserQuota)
+				r.Get("/audit", h.ListAuditLogs)
 			})
 		})
 	})

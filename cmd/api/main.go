@@ -15,6 +15,9 @@ import (
 	"github.com/aiox-platform/aiox/internal/auth"
 	"github.com/aiox-platform/aiox/internal/config"
 	"github.com/aiox-platform/aiox/internal/database"
+	"github.com/aiox-platform/aiox/internal/governance"
+	"github.com/aiox-platform/aiox/internal/governance/audit"
+	"github.com/aiox-platform/aiox/internal/governance/quota"
 	"github.com/aiox-platform/aiox/internal/memory"
 	inats "github.com/aiox-platform/aiox/internal/nats"
 	"github.com/aiox-platform/aiox/internal/orchestrator"
@@ -85,14 +88,24 @@ func main() {
 	memorySvc := memory.NewService(memoryRepo, shortTermStore)
 	memoryHandler := memory.NewHandler(memorySvc)
 
+	// Governance (Phase 5)
+	quotaRepo := quota.NewRepository(pool)
+	rateLimiter := quota.NewRateLimiter(redisClient)
+	quotaSvc := quota.NewService(quotaRepo, rateLimiter, cfg.Governance)
+	auditRepo := audit.NewRepository(pool)
+	govHandler := governance.NewHandler(quotaSvc, auditRepo)
+
 	// NATS publisher and consumer manager
 	publisher := inats.NewPublisher(natsClient.JetStream())
 	consumerMgr := inats.NewConsumerManager(natsClient.JetStream())
 
+	// Audit consumer: NATS → audit_logs table
+	auditConsumer := audit.NewConsumer(auditRepo, consumerMgr)
+
 	// Orchestrator
 	validator := orchestrator.NewValidator()
 	orchRouter := orchestrator.NewRouter(agentRepo)
-	orch := orchestrator.NewOrchestrator(publisher, consumerMgr, validator, orchRouter)
+	orch := orchestrator.NewOrchestrator(publisher, consumerMgr, validator, orchRouter, quotaSvc)
 
 	// XMPP handler and component
 	xmppHandler := ixmpp.NewHandler(publisher)
@@ -123,7 +136,7 @@ func main() {
 	// Task dispatcher: NATS tasks → gRPC workers → outbound messages
 	dispatcher := worker.NewDispatcher(
 		workerPool, publisher, consumerMgr,
-		agentSvc, workerRepo, memorySvc, grpcWorkerServer.ResultChannel(),
+		agentSvc, workerRepo, memorySvc, quotaSvc, grpcWorkerServer.ResultChannel(),
 		cfg.GRPC.TaskTimeoutSec,
 	)
 
@@ -146,6 +159,10 @@ func main() {
 		SearchMemories:    memoryHandler.Search,
 		DeleteMemory:      memoryHandler.Delete,
 		DeleteAllMemories: memoryHandler.DeleteAll,
+
+		GetUserQuota:       govHandler.GetQuota,
+		ListAuditLogs:      govHandler.ListAuditLogs,
+		ListAgentAuditLogs: govHandler.ListAgentAuditLogs,
 
 		AuthMiddleware: auth.Middleware(authSvc),
 
@@ -203,6 +220,15 @@ func main() {
 		slog.Info("starting task dispatcher")
 		if err := dispatcher.Start(ctx); err != nil {
 			slog.Error("task dispatcher error", "error", err)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		slog.Info("starting audit consumer")
+		if err := auditConsumer.Start(ctx); err != nil {
+			slog.Error("audit consumer error", "error", err)
 		}
 	}()
 

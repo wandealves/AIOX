@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -11,6 +12,8 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/aiox-platform/aiox/internal/agents"
+	"github.com/aiox-platform/aiox/internal/governance"
+	"github.com/aiox-platform/aiox/internal/governance/quota"
 	"github.com/aiox-platform/aiox/internal/memory"
 	inats "github.com/aiox-platform/aiox/internal/nats"
 	pb "github.com/aiox-platform/aiox/internal/worker/workerpb"
@@ -39,6 +42,7 @@ type Dispatcher struct {
 	agentSvc    *agents.Service
 	repo        *Repository
 	memorySvc   *memory.Service
+	quotaSvc    *quota.Service
 	resultCh    <-chan *pb.TaskResponse
 	taskTimeout time.Duration
 
@@ -54,6 +58,7 @@ func NewDispatcher(
 	agentSvc *agents.Service,
 	repo *Repository,
 	memorySvc *memory.Service,
+	quotaSvc *quota.Service,
 	resultCh <-chan *pb.TaskResponse,
 	taskTimeoutSec int,
 ) *Dispatcher {
@@ -68,6 +73,7 @@ func NewDispatcher(
 		agentSvc:    agentSvc,
 		repo:        repo,
 		memorySvc:   memorySvc,
+		quotaSvc:    quotaSvc,
 		resultCh:    resultCh,
 		taskTimeout: timeout,
 		pending:     make(map[string]*pendingTask),
@@ -148,6 +154,27 @@ func (d *Dispatcher) handleTask(ctx context.Context, msg jetstream.Msg) {
 		d.sendErrorResponse(ctx, task, "Agent not found")
 		_ = msg.Ack()
 		return
+	}
+
+	// Governance checks at dispatch time
+	gov := governance.ParseGovernance(agent.Governance)
+
+	if gov.Blocked {
+		slog.Warn("dispatcher: agent blocked by governance", "agent_id", task.AgentID)
+		d.sendErrorResponse(ctx, task, "Agent is blocked by governance policy")
+		_ = msg.Ack()
+		return
+	}
+
+	// Check allowed providers against agent's LLM config
+	if len(gov.AllowedProviders) > 0 {
+		provider := extractProvider(agent.LLMConfig)
+		if provider != "" && !providerAllowed(provider, gov.AllowedProviders) {
+			slog.Warn("dispatcher: provider not allowed", "agent_id", task.AgentID, "provider", provider)
+			d.sendErrorResponse(ctx, task, "LLM provider '"+provider+"' not allowed by governance policy")
+			_ = msg.Ack()
+			return
+		}
 	}
 
 	// Select a worker
@@ -306,6 +333,13 @@ func (d *Dispatcher) handleResult(ctx context.Context, resp *pb.TaskResponse) {
 		slog.Error("dispatcher: recording execution", "error", err)
 	}
 
+	// Deduct tokens from quota after successful completion
+	if status == "completed" && resp.TokensUsed > 0 && d.quotaSvc != nil {
+		if err := d.quotaSvc.DeductTokens(ctx, pt.OwnerUserID, int(resp.TokensUsed)); err != nil {
+			slog.Warn("dispatcher: deducting tokens from quota", "error", err, "user_id", pt.OwnerUserID)
+		}
+	}
+
 	// Store memory if enabled
 	if pt.MemoryConfig.Enabled && d.memorySvc != nil && status == "completed" {
 		// Store short-term conversation turn
@@ -441,4 +475,28 @@ func (d *Dispatcher) sendErrorResponse(ctx context.Context, task inats.TaskMessa
 	if err := d.publisher.PublishOutboundMessage(ctx, outbound); err != nil {
 		slog.Error("dispatcher: publishing error response", "error", err)
 	}
+}
+
+// extractProvider parses the provider field from the LLM config JSON.
+func extractProvider(llmConfig json.RawMessage) string {
+	if len(llmConfig) == 0 {
+		return ""
+	}
+	var cfg struct {
+		Provider string `json:"provider"`
+	}
+	if err := json.Unmarshal(llmConfig, &cfg); err != nil {
+		return ""
+	}
+	return cfg.Provider
+}
+
+// providerAllowed checks if a provider is in the allowed list (case-insensitive).
+func providerAllowed(provider string, allowed []string) bool {
+	for _, a := range allowed {
+		if strings.EqualFold(a, provider) {
+			return true
+		}
+	}
+	return false
 }

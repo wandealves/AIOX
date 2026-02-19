@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go/jetstream"
 
+	"github.com/aiox-platform/aiox/internal/governance/quota"
 	inats "github.com/aiox-platform/aiox/internal/nats"
 )
 
@@ -19,6 +20,7 @@ type Orchestrator struct {
 	consumerMgr *inats.ConsumerManager
 	validator   *Validator
 	router      *Router
+	quotaSvc    *quota.Service
 }
 
 // NewOrchestrator creates a new Orchestrator.
@@ -27,12 +29,14 @@ func NewOrchestrator(
 	consumerMgr *inats.ConsumerManager,
 	validator *Validator,
 	router *Router,
+	quotaSvc *quota.Service,
 ) *Orchestrator {
 	return &Orchestrator{
 		publisher:   publisher,
 		consumerMgr: consumerMgr,
 		validator:   validator,
 		router:      router,
+		quotaSvc:    quotaSvc,
 	}
 }
 
@@ -94,6 +98,16 @@ func (o *Orchestrator) processMessage(ctx context.Context, msg jetstream.Msg) {
 		o.sendErrorResponse(ctx, inbound, "Message not authorized")
 		_ = msg.Ack()
 		return
+	}
+
+	// Check quota (fast-fail before NATS publish)
+	if o.quotaSvc != nil {
+		if err := o.quotaSvc.CheckQuota(ctx, route.OwnerUserID); err != nil {
+			slog.Warn("quota exceeded", "error", err, "user_id", route.OwnerUserID)
+			o.sendErrorResponse(ctx, inbound, "Quota exceeded: "+err.Error())
+			_ = msg.Ack()
+			return
+		}
 	}
 
 	// Publish task for Python worker processing via gRPC dispatcher
