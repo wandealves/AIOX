@@ -43,7 +43,7 @@ func setupSecurityTestEnv(t *testing.T) *testEnv {
 	pgContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
 			Image:        "pgvector/pgvector:0.8.1-pg16",
-			ExposedPorts: []string{"5432/tcp"},
+			ExposedPorts: []string{"5433/tcp"},
 			Env: map[string]string{
 				"POSTGRES_USER":     "test",
 				"POSTGRES_PASSWORD": "test",
@@ -59,7 +59,7 @@ func setupSecurityTestEnv(t *testing.T) *testEnv {
 	t.Cleanup(func() { pgContainer.Terminate(ctx) })
 
 	pgHost, _ := pgContainer.Host(ctx)
-	pgPort, _ := pgContainer.MappedPort(ctx, "5432")
+	pgPort, _ := pgContainer.MappedPort(ctx, "5433")
 
 	redisContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
@@ -104,7 +104,7 @@ func setupSecurityTestEnv(t *testing.T) *testEnv {
 	agentSvc := agents.NewService(agentRepo, encKey, "security.test")
 	agentHandler := agents.NewHandler(agentSvc)
 
-	router := api.NewRouter(pool, api.HandlerSet{
+	router := api.NewRouter(pool, nil, api.HandlerSet{
 		Register:            authHandler.Register,
 		Login:               authHandler.Login,
 		Refresh:             authHandler.Refresh,

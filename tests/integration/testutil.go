@@ -51,7 +51,7 @@ func SetupTestEnv(t *testing.T) *TestEnv {
 	pgContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
 			Image:        "pgvector/pgvector:0.8.1-pg16",
-			ExposedPorts: []string{"5432/tcp"},
+			ExposedPorts: []string{"5433/tcp"},
 			Env: map[string]string{
 				"POSTGRES_USER":     "test",
 				"POSTGRES_PASSWORD": "test",
@@ -69,7 +69,7 @@ func SetupTestEnv(t *testing.T) *TestEnv {
 	t.Cleanup(func() { pgContainer.Terminate(ctx) })
 
 	pgHost, _ := pgContainer.Host(ctx)
-	pgPort, _ := pgContainer.MappedPort(ctx, "5432")
+	pgPort, _ := pgContainer.MappedPort(ctx, "3")
 
 	// Start Redis container
 	redisContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
@@ -135,7 +135,7 @@ func SetupTestEnv(t *testing.T) *TestEnv {
 	agentSvc := agents.NewService(agentRepo, encryptionKey, xmppDomain)
 	agentHandler := agents.NewHandler(agentSvc)
 
-	router := api.NewRouter(pool, api.HandlerSet{
+	router := api.NewRouter(pool, nil, api.HandlerSet{
 		Register: authHandler.Register,
 		Login:    authHandler.Login,
 		Refresh:  authHandler.Refresh,

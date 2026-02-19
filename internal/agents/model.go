@@ -70,6 +70,15 @@ type UpdateAgentRequest struct {
 	Visibility        *string          `json:"visibility" validate:"omitempty,oneof=private public"`
 }
 
+// ParseProfile unmarshals a raw JSONB profile byte slice into an AgentProfile.
+func ParseProfile(data []byte) (*AgentProfile, error) {
+	var p AgentProfile
+	if err := json.Unmarshal(data, &p); err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
 type ListAgentsParams struct {
 	Page     int
 	PageSize int

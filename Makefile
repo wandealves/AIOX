@@ -4,7 +4,7 @@
 APP_NAME=aiox-api
 BUILD_DIR=./bin
 MIGRATIONS_DIR=./migrations
-DB_URL=postgres://aiox:aiox_secret@localhost:5432/aiox?sslmode=disable
+DB_URL=postgres://aiox:aiox_secret@localhost:5433/aiox?sslmode=disable
 
 # Build
 build:

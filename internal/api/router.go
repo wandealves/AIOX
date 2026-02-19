@@ -9,6 +9,7 @@ import (
 
 	"github.com/aiox-platform/aiox/internal/database"
 	mw "github.com/aiox-platform/aiox/internal/middleware"
+	inats "github.com/aiox-platform/aiox/internal/nats"
 )
 
 // HandlerSet holds handler functions injected from main.go to avoid import cycles.
@@ -31,7 +32,7 @@ type HandlerSet struct {
 	AuthMiddleware func(http.Handler) http.Handler
 }
 
-func NewRouter(pool *pgxpool.Pool, h HandlerSet) http.Handler {
+func NewRouter(pool *pgxpool.Pool, natsClient *inats.Client, h HandlerSet) http.Handler {
 	r := chi.NewRouter()
 
 	// Global middleware
@@ -42,11 +43,29 @@ func NewRouter(pool *pgxpool.Pool, h HandlerSet) http.Handler {
 
 	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		if err := database.HealthCheck(r.Context(), pool); err != nil {
-			JSONErrorMessage(w, http.StatusServiceUnavailable, "database unhealthy")
-			return
+		health := map[string]string{
+			"status":   "healthy",
+			"database": "healthy",
+			"nats":     "healthy",
 		}
-		JSON(w, http.StatusOK, map[string]string{"status": "healthy"})
+
+		status := http.StatusOK
+
+		if err := database.HealthCheck(r.Context(), pool); err != nil {
+			health["database"] = "unhealthy"
+			health["status"] = "degraded"
+			status = http.StatusServiceUnavailable
+		}
+
+		if natsClient != nil && !natsClient.Healthy() {
+			health["nats"] = "unhealthy"
+			health["status"] = "degraded"
+			status = http.StatusServiceUnavailable
+		} else if natsClient == nil {
+			health["nats"] = "not configured"
+		}
+
+		JSON(w, status, health)
 	})
 
 	// API v1

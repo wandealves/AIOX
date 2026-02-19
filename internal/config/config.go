@@ -18,6 +18,7 @@ type Config struct {
 	JWT        JWTConfig
 	Encryption EncryptionConfig
 	XMPP       XMPPConfig
+	NATS       NATSConfig
 	Log        LogConfig
 }
 
@@ -64,7 +65,19 @@ type EncryptionConfig struct {
 }
 
 type XMPPConfig struct {
-	Domain string
+	Domain          string
+	ComponentHost   string
+	ComponentPort   int
+	ComponentSecret string
+	ComponentName   string
+}
+
+func (c XMPPConfig) ComponentAddr() string {
+	return fmt.Sprintf("%s:%d", c.ComponentHost, c.ComponentPort)
+}
+
+type NATSConfig struct {
+	URL string
 }
 
 type LogConfig struct {
@@ -114,7 +127,14 @@ func Load() (*Config, error) {
 			Key: k.String("encryption.key"),
 		},
 		XMPP: XMPPConfig{
-			Domain: k.String("xmpp.domain"),
+			Domain:          k.String("xmpp.domain"),
+			ComponentHost:   k.String("xmpp.component.host"),
+			ComponentPort:   k.Int("xmpp.component.port"),
+			ComponentSecret: k.String("xmpp.component.secret"),
+			ComponentName:   k.String("xmpp.component.name"),
+		},
+		NATS: NATSConfig{
+			URL: k.String("nats.url"),
 		},
 		Log: LogConfig{
 			Level:  k.String("log.level"),
@@ -133,7 +153,7 @@ func Load() (*Config, error) {
 		cfg.DB.Host = "localhost"
 	}
 	if cfg.DB.Port == 0 {
-		cfg.DB.Port = 5432
+		cfg.DB.Port = 5433
 	}
 	if cfg.DB.User == "" {
 		cfg.DB.User = "aiox"
@@ -155,6 +175,21 @@ func Load() (*Config, error) {
 	}
 	if cfg.XMPP.Domain == "" {
 		cfg.XMPP.Domain = "aiox.local"
+	}
+	if cfg.XMPP.ComponentHost == "" {
+		cfg.XMPP.ComponentHost = "localhost"
+	}
+	if cfg.XMPP.ComponentPort == 0 {
+		cfg.XMPP.ComponentPort = 5275
+	}
+	if cfg.XMPP.ComponentSecret == "" {
+		cfg.XMPP.ComponentSecret = "component_secret"
+	}
+	if cfg.XMPP.ComponentName == "" {
+		cfg.XMPP.ComponentName = "agents.aiox.local"
+	}
+	if cfg.NATS.URL == "" {
+		cfg.NATS.URL = "nats://localhost:4222"
 	}
 	if cfg.Log.Level == "" {
 		cfg.Log.Level = "debug"

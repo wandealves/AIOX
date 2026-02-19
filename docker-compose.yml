@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: aiox_secret
       POSTGRES_DB: aiox
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -30,6 +30,39 @@ services:
       timeout: 5s
       retries: 5
 
+  nats:
+    image: nats:2-alpine
+    container_name: aiox-nats
+    command: "--jetstream --store_dir /data --http_port 8222"
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  ejabberd:
+    image: ghcr.io/processone/ejabberd:latest
+    container_name: aiox-ejabberd
+    ports:
+      - "5222:5222"
+      - "5275:5275"
+      - "5280:5280"
+    volumes:
+      - ./docker/ejabberd/ejabberd.yml:/home/ejabberd/conf/ejabberd.yml
+      - ejabberd_data:/home/ejabberd/database
+    healthcheck:
+      test: ["CMD", "ejabberdctl", "status"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
 volumes:
   postgres_data:
   redis_data:
+  nats_data:
+  ejabberd_data:
