@@ -1,0 +1,10 @@
+bin/
+*.out
+*.html
+.env
+.git
+.github
+worker/__pycache__
+worker/.venv
+docker/
+coverage.*

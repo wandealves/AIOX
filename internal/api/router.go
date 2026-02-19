@@ -6,6 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/aiox-platform/aiox/internal/database"
 	mw "github.com/aiox-platform/aiox/internal/middleware"
@@ -21,12 +22,12 @@ type HandlerSet struct {
 	Logout   http.HandlerFunc
 
 	// Agent handlers
-	CreateAgent          http.HandlerFunc
-	ListAgents           http.HandlerFunc
-	GetAgent             http.HandlerFunc
-	UpdateAgent          http.HandlerFunc
-	DeleteAgent          http.HandlerFunc
-	OwnershipMiddleware  func(http.Handler) http.Handler
+	CreateAgent         http.HandlerFunc
+	ListAgents          http.HandlerFunc
+	GetAgent            http.HandlerFunc
+	UpdateAgent         http.HandlerFunc
+	DeleteAgent         http.HandlerFunc
+	OwnershipMiddleware func(http.Handler) http.Handler
 
 	// Memory handlers (Phase 4)
 	ListMemories      http.HandlerFunc
@@ -47,17 +48,30 @@ type HandlerSet struct {
 	WorkerPoolHealthy func() bool
 }
 
-func NewRouter(pool *pgxpool.Pool, natsClient *inats.Client, h HandlerSet) http.Handler {
+// RouterConfig holds configuration for the router.
+type RouterConfig struct {
+	CORSAllowedOrigins []string
+	AuthRateLimiter    func(http.Handler) http.Handler
+}
+
+func NewRouter(pool *pgxpool.Pool, natsClient *inats.Client, cfg RouterConfig, h HandlerSet) http.Handler {
 	r := chi.NewRouter()
 
 	// Global middleware
 	r.Use(mw.RequestID)
+	r.Use(mw.SecurityHeaders)
 	r.Use(mw.Logging)
 	r.Use(mw.Recovery)
-	r.Use(cors.Handler(mw.CORS()))
+	r.Use(mw.Metrics)
+	r.Use(cors.Handler(mw.CORS(cfg.CORSAllowedOrigins)))
 
-	// Health check
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+	// Liveness probe — always 200, no dependency checks
+	r.Get("/health/live", func(w http.ResponseWriter, r *http.Request) {
+		JSON(w, http.StatusOK, map[string]string{"status": "alive"})
+	})
+
+	// Readiness probe — checks DB, NATS, workers
+	readinessHandler := func(w http.ResponseWriter, r *http.Request) {
 		health := map[string]string{
 			"status":   "healthy",
 			"database": "healthy",
@@ -91,12 +105,21 @@ func NewRouter(pool *pgxpool.Pool, natsClient *inats.Client, h HandlerSet) http.
 		}
 
 		JSON(w, status, health)
-	})
+	}
+
+	r.Get("/health/ready", readinessHandler)
+	r.Get("/health", readinessHandler)
+
+	// Prometheus metrics
+	r.Handle("/metrics", promhttp.Handler())
 
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {
-		// Auth routes (public)
+		// Auth routes (public) — optionally rate-limited
 		r.Route("/auth", func(r chi.Router) {
+			if cfg.AuthRateLimiter != nil {
+				r.Use(cfg.AuthRateLimiter)
+			}
 			r.Post("/register", h.Register)
 			r.Post("/login", h.Login)
 			r.Post("/refresh", h.Refresh)

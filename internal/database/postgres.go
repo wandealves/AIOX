@@ -17,6 +17,9 @@ func NewPostgresPool(ctx context.Context, cfg config.DBConfig) (*pgxpool.Pool, e
 	}
 
 	poolCfg.MaxConns = cfg.MaxConns
+	poolCfg.MinConns = cfg.MinConns
+	poolCfg.MaxConnIdleTime = cfg.MaxConnIdleTime
+	poolCfg.MaxConnLifetime = cfg.MaxConnLifetime
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
@@ -28,7 +31,10 @@ func NewPostgresPool(ctx context.Context, cfg config.DBConfig) (*pgxpool.Pool, e
 		return nil, fmt.Errorf("pinging postgres: %w", err)
 	}
 
-	slog.Info("connected to PostgreSQL", "host", cfg.Host, "port", cfg.Port, "db", cfg.Name)
+	slog.Info("connected to PostgreSQL",
+		"host", cfg.Host, "port", cfg.Port, "db", cfg.Name,
+		"max_conns", cfg.MaxConns, "min_conns", cfg.MinConns,
+	)
 	return pool, nil
 }
 

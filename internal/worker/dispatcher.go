@@ -15,6 +15,7 @@ import (
 	"github.com/aiox-platform/aiox/internal/governance"
 	"github.com/aiox-platform/aiox/internal/governance/quota"
 	"github.com/aiox-platform/aiox/internal/memory"
+	"github.com/aiox-platform/aiox/internal/metrics"
 	inats "github.com/aiox-platform/aiox/internal/nats"
 	pb "github.com/aiox-platform/aiox/internal/worker/workerpb"
 )
@@ -254,6 +255,7 @@ func (d *Dispatcher) handleTask(ctx context.Context, msg jetstream.Msg) {
 	d.mu.Unlock()
 
 	_ = msg.Ack()
+	metrics.TasksDispatchedTotal.Inc()
 
 	slog.Debug("dispatcher: task dispatched",
 		"request_id", task.RequestID,
@@ -390,6 +392,8 @@ func (d *Dispatcher) handleResult(ctx context.Context, resp *pb.TaskResponse) {
 	if err := d.publisher.PublishAuditEvent(ctx, audit); err != nil {
 		slog.Error("dispatcher: publishing audit event", "error", err)
 	}
+
+	metrics.TasksCompletedTotal.WithLabelValues(status).Inc()
 
 	slog.Debug("dispatcher: result processed",
 		"request_id", resp.RequestId,

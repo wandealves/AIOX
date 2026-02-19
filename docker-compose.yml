@@ -16,6 +16,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
@@ -29,6 +30,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   nats:
     image: nats:2-alpine
@@ -44,6 +46,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   ejabberd:
     image: ghcr.io/processone/ejabberd:latest
@@ -60,6 +63,44 @@ services:
       interval: 10s
       timeout: 10s
       retries: 5
+    restart: unless-stopped
+
+  aiox-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aiox-api
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      REDIS_HOST: redis
+      NATS_URL: nats://nats:4222
+      XMPP_COMPONENT_HOST: ejabberd
+      DB_AUTO_MIGRATE: "true"
+      DB_MIGRATIONS_PATH: /app/migrations
+    ports:
+      - "8080:8080"
+      - "50051:50051"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/live"]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "1.0"
 
   aiox-worker:
     build:
@@ -68,16 +109,14 @@ services:
     container_name: aiox-worker
     environment:
       WORKER_ID: worker-1
-      GRPC_HOST: host.docker.internal
+      GRPC_HOST: aiox-api
       GRPC_PORT: 50051
       GRPC_WORKER_API_KEY: ${GRPC_WORKER_API_KEY:-}
       MAX_CONCURRENT: 4
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
-      nats:
+      aiox-api:
         condition: service_healthy
     restart: unless-stopped
 

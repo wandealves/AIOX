@@ -3,6 +3,7 @@ package worker
 import (
 	"sync"
 
+	"github.com/aiox-platform/aiox/internal/metrics"
 	pb "github.com/aiox-platform/aiox/internal/worker/workerpb"
 	"google.golang.org/grpc"
 )
@@ -72,6 +73,7 @@ func (p *Pool) Register(w *ConnectedWorker) bool {
 		return false
 	}
 	p.workers[w.WorkerID] = w
+	metrics.WorkerPoolConnected.Set(float64(len(p.workers)))
 	return true
 }
 
@@ -80,6 +82,7 @@ func (p *Pool) Unregister(workerID string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	delete(p.workers, workerID)
+	metrics.WorkerPoolConnected.Set(float64(len(p.workers)))
 }
 
 // SelectWorker picks the least-loaded worker that has capacity.

@@ -1,4 +1,4 @@
-.PHONY: build dev run test test-integration up down migrate-up migrate-down migrate-create lint clean proto
+.PHONY: build dev run test test-integration up down migrate-up migrate-down migrate-create lint clean proto docker-build vet fmt fmt-check security check
 
 # Variables
 APP_NAME=aiox-api
@@ -23,6 +23,9 @@ down:
 
 down-v:
 	docker compose down -v
+
+docker-build:
+	docker build -t $(APP_NAME):latest .
 
 # Migrations
 migrate-up:
@@ -49,9 +52,26 @@ test-coverage:
 	go test ./... -coverprofile=coverage.out -race -count=1
 	go tool cover -html=coverage.out -o coverage.html
 
+# Code quality
+vet:
+	go vet ./...
+
+fmt:
+	gofmt -w .
+
+fmt-check:
+	@test -z "$$(gofmt -l .)" || (echo "Files need formatting:" && gofmt -l . && exit 1)
+
 # Lint
 lint:
 	golangci-lint run ./...
+
+# Security scan (requires govulncheck: go install golang.org/x/vuln/cmd/govulncheck@latest)
+security:
+	govulncheck ./...
+
+# Run all checks: format, vet, test
+check: fmt-check vet test
 
 # Proto (generate Go code from .proto files)
 proto:

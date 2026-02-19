@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,18 +39,24 @@ type GRPCConfig struct {
 }
 
 type ServerConfig struct {
-	Host string
-	Port int
+	Host               string
+	Port               int
+	CORSAllowedOrigins []string
 }
 
 type DBConfig struct {
-	Host     string
-	Port     int
-	User     string
-	Password string
-	Name     string
-	SSLMode  string
-	MaxConns int32
+	Host            string
+	Port            int
+	User            string
+	Password        string
+	Name            string
+	SSLMode         string
+	MaxConns        int32
+	MinConns        int32
+	MaxConnIdleTime time.Duration
+	MaxConnLifetime time.Duration
+	AutoMigrate     bool
+	MigrationsPath  string
 }
 
 func (c DBConfig) DSN() string {
@@ -240,6 +247,41 @@ func Load() (*Config, error) {
 	}
 	if cfg.Log.Format == "" {
 		cfg.Log.Format = "text"
+	}
+
+	// CORS allowed origins (comma-separated)
+	corsRaw := k.String("cors.allowed.origins")
+	if corsRaw != "" {
+		for _, o := range strings.Split(corsRaw, ",") {
+			o = strings.TrimSpace(o)
+			if o != "" {
+				cfg.Server.CORSAllowedOrigins = append(cfg.Server.CORSAllowedOrigins, o)
+			}
+		}
+	}
+	if len(cfg.Server.CORSAllowedOrigins) == 0 {
+		cfg.Server.CORSAllowedOrigins = []string{"http://localhost:3000"}
+	}
+
+	// DB pool tuning
+	if v := k.String("db.min.conns"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.DB.MinConns = int32(n)
+		}
+	}
+	if cfg.DB.MinConns == 0 {
+		cfg.DB.MinConns = 2
+	}
+	cfg.DB.MaxConnIdleTime = 5 * time.Minute
+	cfg.DB.MaxConnLifetime = 1 * time.Hour
+
+	// Auto-migrate
+	autoMigrateStr := k.String("db.auto.migrate")
+	cfg.DB.AutoMigrate = autoMigrateStr == "true" || autoMigrateStr == "1"
+
+	cfg.DB.MigrationsPath = k.String("db.migrations.path")
+	if cfg.DB.MigrationsPath == "" {
+		cfg.DB.MigrationsPath = "./migrations"
 	}
 
 	// Parse durations

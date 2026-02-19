@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"time"
 
 	"google.golang.org/grpc"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/aiox-platform/aiox/internal/governance/audit"
 	"github.com/aiox-platform/aiox/internal/governance/quota"
 	"github.com/aiox-platform/aiox/internal/memory"
+	"github.com/aiox-platform/aiox/internal/middleware"
 	inats "github.com/aiox-platform/aiox/internal/nats"
 	"github.com/aiox-platform/aiox/internal/orchestrator"
 	iredis "github.com/aiox-platform/aiox/internal/redis"
@@ -38,8 +40,22 @@ func main() {
 
 	setupLogger(cfg.Log)
 
+	if err := cfg.Validate(); err != nil {
+		slog.Error("config validation failed", "error", err)
+		os.Exit(1)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Auto-migrate if enabled
+	if cfg.DB.AutoMigrate {
+		slog.Info("running database migrations", "path", cfg.DB.MigrationsPath)
+		if err := database.RunMigrations(cfg.DB.DSN(), cfg.DB.MigrationsPath); err != nil {
+			slog.Error("auto-migration failed", "error", err)
+			os.Exit(1)
+		}
+	}
 
 	// PostgreSQL
 	pool, err := database.NewPostgresPool(ctx, cfg.DB)
@@ -47,7 +63,6 @@ func main() {
 		slog.Error("connecting to postgres", "error", err)
 		os.Exit(1)
 	}
-	defer pool.Close()
 
 	// Redis
 	redisClient, err := iredis.NewClient(ctx, cfg.Redis)
@@ -55,7 +70,6 @@ func main() {
 		slog.Error("connecting to redis", "error", err)
 		os.Exit(1)
 	}
-	defer redisClient.Close()
 
 	// NATS
 	natsClient, err := inats.NewClient(ctx, cfg.NATS)
@@ -63,7 +77,6 @@ func main() {
 		slog.Error("connecting to nats", "error", err)
 		os.Exit(1)
 	}
-	defer natsClient.Close()
 
 	// Auth
 	jwtManager := auth.NewJWTManager(
@@ -140,8 +153,14 @@ func main() {
 		cfg.GRPC.TaskTimeoutSec,
 	)
 
+	// Auth rate limiter
+	authRateLimiter := middleware.NewRateLimiter(redisClient, 20, 60)
+
 	// Router
-	router := api.NewRouter(pool, natsClient, api.HandlerSet{
+	router := api.NewRouter(pool, natsClient, api.RouterConfig{
+		CORSAllowedOrigins: cfg.Server.CORSAllowedOrigins,
+		AuthRateLimiter:    authRateLimiter.Middleware,
+	}, api.HandlerSet{
 		Register: authHandler.Register,
 		Login:    authHandler.Login,
 		Refresh:  authHandler.Refresh,
@@ -238,12 +257,30 @@ func main() {
 		slog.Error("server error", "error", err)
 	}
 
-	// Shutdown: cancel context to stop all goroutines
+	// Ordered shutdown
+	slog.Info("initiating shutdown")
 	cancel()
+
 	grpcSrv.GracefulStop()
-	slog.Info("waiting for goroutines to finish")
-	wg.Wait()
-	slog.Info("all goroutines stopped, shutting down")
+
+	// Wait for goroutines with timeout
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		slog.Info("all goroutines stopped")
+	case <-time.After(15 * time.Second):
+		slog.Warn("shutdown timed out after 15s, forcing exit")
+	}
+
+	natsClient.Close()
+	redisClient.Close()
+	pool.Close()
+	slog.Info("shutdown complete")
 }
 
 func setupLogger(cfg config.LogConfig) {

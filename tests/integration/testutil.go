@@ -158,7 +158,7 @@ func SetupTestEnv(t *testing.T) *TestEnv {
 	auditRepo := audit.NewRepository(pool)
 	govHandler := governance.NewHandler(quotaSvc, auditRepo)
 
-	router := api.NewRouter(pool, nil, api.HandlerSet{
+	router := api.NewRouter(pool, nil, api.RouterConfig{}, api.HandlerSet{
 		Register: authHandler.Register,
 		Login:    authHandler.Login,
 		Refresh:  authHandler.Refresh,
