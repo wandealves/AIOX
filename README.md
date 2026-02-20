@@ -46,30 +46,31 @@ User ──XMPP──► ejabberd ──► XMPP Component ──► NATS (inbou
 
 ### Stack
 
-| Layer | Technology |
-|---|---|
-| HTTP API | Go + chi |
-| Async messaging | NATS JetStream |
-| XMPP server | ejabberd |
-| AI workers | Python 3.12 + gRPC |
-| Database | PostgreSQL 16 + pgvector |
-| Cache / Rate limiting | Redis 7 |
-| Metrics | Prometheus |
+| Layer                 | Technology               |
+| --------------------- | ------------------------ |
+| HTTP API              | Go + chi                 |
+| Async messaging       | NATS JetStream           |
+| XMPP server           | ejabberd                 |
+| AI workers            | Python 3.12 + gRPC       |
+| Database              | PostgreSQL 16 + pgvector |
+| Cache / Rate limiting | Redis 7                  |
+| Metrics               | Prometheus               |
 
 ---
 
 ## Prerequisites
 
-| Tool | Minimum version | Purpose |
-|---|---|---|
-| Docker | 24+ | All services |
-| Docker Compose | v2 | Orchestration |
-| Go | 1.24 | Local dev / unit tests |
-| Python | 3.12 | Worker local dev |
-| `openssl` | any | TLS certificate generation |
-| An XMPP client | — | Chat with agents (e.g. [Dino](https://dino.im)) |
+| Tool           | Minimum version | Purpose                                         |
+| -------------- | --------------- | ----------------------------------------------- |
+| Docker         | 24+             | All services                                    |
+| Docker Compose | v2              | Orchestration                                   |
+| Go             | 1.24            | Local dev / unit tests                          |
+| Python         | 3.12            | Worker local dev                                |
+| `openssl`      | any             | TLS certificate generation                      |
+| An XMPP client | —               | Chat with agents (e.g. [Dino](https://dino.im)) |
 
 > **Go path note:** if Go is installed at `~/go-sdk/go/bin`, add it to your PATH:
+>
 > ```bash
 > export PATH=$HOME/go-sdk/go/bin:$PATH
 > ```
@@ -128,14 +129,14 @@ make up
 
 Services started:
 
-| Service | Port(s) | Description |
-|---|---|---|
-| PostgreSQL | 5433 | Primary database |
-| Redis | 6379 | Cache + rate limiting |
-| NATS | 4222, 8222 | Message bus (HTTP monitor at :8222) |
-| ejabberd | 5222, 5275, 5280 | XMPP server |
-| aiox-api | 8080, 50051 | REST API + gRPC |
-| aiox-worker | — | Python AI worker |
+| Service     | Port(s)          | Description                         |
+| ----------- | ---------------- | ----------------------------------- |
+| PostgreSQL  | 5433             | Primary database                    |
+| Redis       | 6379             | Cache + rate limiting               |
+| NATS        | 4222, 8222       | Message bus (HTTP monitor at :8222) |
+| ejabberd    | 5222, 5275, 5280 | XMPP server                         |
+| aiox-api    | 8080, 50051      | REST API + gRPC                     |
+| aiox-worker | —                | Python AI worker                    |
 
 ### 5. Verify all services are healthy
 
@@ -188,7 +189,7 @@ Users must be registered on the ejabberd server to chat with agents over XMPP.
 docker exec -it aiox-ejabberd ejabberdctl register <username> aiox.local <password>
 
 # Example
-docker exec -it aiox-ejabberd ejabberdctl register wande aiox.local senha123
+docker exec -it aiox-ejabberd ejabberdctl register turing aiox.local senha123
 
 # List registered users
 docker exec -it aiox-ejabberd ejabberdctl registered_users aiox.local
@@ -200,7 +201,7 @@ docker exec -it aiox-ejabberd ejabberdctl unregister <username> aiox.local
 ### Connecting with Dino
 
 1. Open Dino → **Add Account**
-2. JID: `wande@aiox.local`
+2. JID: `turing@aiox.local`
 3. Password: `senha123`
 4. Dino will auto-discover the server at `aiox.local:5222`
 5. The certificate should now be trusted (after `install-ca.sh`)
@@ -255,95 +256,96 @@ All configuration is loaded from `.env` (file) then overridden by environment va
 
 ### Server
 
-| Env var | Default | Description |
-|---|---|---|
-| `SERVER_HOST` | `0.0.0.0` | HTTP bind address |
-| `SERVER_PORT` | `8080` | HTTP port |
+| Env var                | Default                 | Description                                   |
+| ---------------------- | ----------------------- | --------------------------------------------- |
+| `SERVER_HOST`          | `0.0.0.0`               | HTTP bind address                             |
+| `SERVER_PORT`          | `8080`                  | HTTP port                                     |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated allowed origins (`*` for all) |
 
 ### Database (PostgreSQL)
 
-| Env var | Default | Description |
-|---|---|---|
-| `DB_HOST` | `localhost` | Host |
-| `DB_PORT` | `5433` | Port |
-| `DB_USER` | `aiox` | Username |
-| `DB_PASSWORD` | — | **Required** |
-| `DB_NAME` | `aiox` | Database name |
-| `DB_SSLMODE` | `disable` | `disable` / `require` / `verify-full` |
-| `DB_MAX_CONNS` | `25` | Connection pool max |
-| `DB_MIN_CONNS` | `2` | Connection pool min |
-| `DB_AUTO_MIGRATE` | `false` | Run migrations on startup |
-| `DB_MIGRATIONS_PATH` | `./migrations` | Path to SQL migrations |
+| Env var              | Default        | Description                           |
+| -------------------- | -------------- | ------------------------------------- |
+| `DB_HOST`            | `localhost`    | Host                                  |
+| `DB_PORT`            | `5433`         | Port                                  |
+| `DB_USER`            | `aiox`         | Username                              |
+| `DB_PASSWORD`        | —              | **Required**                          |
+| `DB_NAME`            | `aiox`         | Database name                         |
+| `DB_SSLMODE`         | `disable`      | `disable` / `require` / `verify-full` |
+| `DB_MAX_CONNS`       | `25`           | Connection pool max                   |
+| `DB_MIN_CONNS`       | `2`            | Connection pool min                   |
+| `DB_AUTO_MIGRATE`    | `false`        | Run migrations on startup             |
+| `DB_MIGRATIONS_PATH` | `./migrations` | Path to SQL migrations                |
 
 ### Redis
 
-| Env var | Default | Description |
-|---|---|---|
-| `REDIS_HOST` | `localhost` | Host |
-| `REDIS_PORT` | `6379` | Port |
-| `REDIS_PASSWORD` | — | Optional password |
-| `REDIS_DB` | `0` | Database index |
+| Env var          | Default     | Description       |
+| ---------------- | ----------- | ----------------- |
+| `REDIS_HOST`     | `localhost` | Host              |
+| `REDIS_PORT`     | `6379`      | Port              |
+| `REDIS_PASSWORD` | —           | Optional password |
+| `REDIS_DB`       | `0`         | Database index    |
 
 ### JWT
 
-| Env var | Default | Description |
-|---|---|---|
-| `JWT_ACCESS_SECRET` | — | **Required**, ≥32 chars, must differ from refresh |
-| `JWT_REFRESH_SECRET` | — | **Required**, ≥32 chars |
-| `JWT_ACCESS_EXPIRY` | `15m` | Access token lifetime |
-| `JWT_REFRESH_EXPIRY` | `168h` | Refresh token lifetime (7 days) |
+| Env var              | Default | Description                                       |
+| -------------------- | ------- | ------------------------------------------------- |
+| `JWT_ACCESS_SECRET`  | —       | **Required**, ≥32 chars, must differ from refresh |
+| `JWT_REFRESH_SECRET` | —       | **Required**, ≥32 chars                           |
+| `JWT_ACCESS_EXPIRY`  | `15m`   | Access token lifetime                             |
+| `JWT_REFRESH_EXPIRY` | `168h`  | Refresh token lifetime (7 days)                   |
 
 ### Encryption
 
-| Env var | Default | Description |
-|---|---|---|
-| `ENCRYPTION_KEY` | — | **Required** — 64 hex chars (32-byte AES-256 key) |
+| Env var          | Default | Description                                       |
+| ---------------- | ------- | ------------------------------------------------- |
+| `ENCRYPTION_KEY` | —       | **Required** — 64 hex chars (32-byte AES-256 key) |
 
 Generate a key:
+
 ```bash
 openssl rand -hex 32
 ```
 
 ### XMPP
 
-| Env var | Default | Description |
-|---|---|---|
-| `XMPP_DOMAIN` | `aiox.local` | XMPP domain |
-| `XMPP_COMPONENT_HOST` | `localhost` | ejabberd host |
-| `XMPP_COMPONENT_PORT` | `5275` | ejabberd component port |
-| `XMPP_COMPONENT_SECRET` | `component_secret` | Shared secret (matches ejabberd.yml) |
-| `XMPP_COMPONENT_NAME` | `agents.aiox.local` | Component subdomain |
+| Env var                 | Default             | Description                          |
+| ----------------------- | ------------------- | ------------------------------------ |
+| `XMPP_DOMAIN`           | `aiox.local`        | XMPP domain                          |
+| `XMPP_COMPONENT_HOST`   | `localhost`         | ejabberd host                        |
+| `XMPP_COMPONENT_PORT`   | `5275`              | ejabberd component port              |
+| `XMPP_COMPONENT_SECRET` | `component_secret`  | Shared secret (matches ejabberd.yml) |
+| `XMPP_COMPONENT_NAME`   | `agents.aiox.local` | Component subdomain                  |
 
 ### NATS
 
-| Env var | Default | Description |
-|---|---|---|
+| Env var    | Default                 | Description         |
+| ---------- | ----------------------- | ------------------- |
 | `NATS_URL` | `nats://localhost:4222` | NATS connection URL |
 
 ### gRPC (Worker)
 
-| Env var | Default | Description |
-|---|---|---|
-| `GRPC_HOST` | `0.0.0.0` | gRPC bind address |
-| `GRPC_PORT` | `50051` | gRPC port |
-| `GRPC_WORKER_API_KEY` | — | **Required**, ≥32 chars |
-| `GRPC_TASK_TIMEOUT_SEC` | `120` | Max task execution time |
+| Env var                 | Default   | Description             |
+| ----------------------- | --------- | ----------------------- |
+| `GRPC_HOST`             | `0.0.0.0` | gRPC bind address       |
+| `GRPC_PORT`             | `50051`   | gRPC port               |
+| `GRPC_WORKER_API_KEY`   | —         | **Required**, ≥32 chars |
+| `GRPC_TASK_TIMEOUT_SEC` | `120`     | Max task execution time |
 
 ### Governance
 
-| Env var | Default | Description |
-|---|---|---|
-| `GOVERNANCE_MAX_TOKENS_PER_DAY` | `100000` | Token quota per user per day |
-| `GOVERNANCE_MAX_TOKENS_PER_MINUTE` | `10000` | Token rate limit per user per minute |
-| `GOVERNANCE_MAX_REQUESTS_PER_DAY` | `1000` | Request quota per user per day |
+| Env var                            | Default  | Description                          |
+| ---------------------------------- | -------- | ------------------------------------ |
+| `GOVERNANCE_MAX_TOKENS_PER_DAY`    | `100000` | Token quota per user per day         |
+| `GOVERNANCE_MAX_TOKENS_PER_MINUTE` | `10000`  | Token rate limit per user per minute |
+| `GOVERNANCE_MAX_REQUESTS_PER_DAY`  | `1000`   | Request quota per user per day       |
 
 ### Logging
 
-| Env var | Default | Options |
-|---|---|---|
-| `LOG_LEVEL` | `debug` | `debug` `info` `warn` `error` |
-| `LOG_FORMAT` | `text` | `text` `json` |
+| Env var      | Default | Options                       |
+| ------------ | ------- | ----------------------------- |
+| `LOG_LEVEL`  | `debug` | `debug` `info` `warn` `error` |
+| `LOG_FORMAT` | `text`  | `text` `json`                 |
 
 ---
 
@@ -352,6 +354,7 @@ openssl rand -hex 32
 Base URL: `http://localhost:8080`
 
 All protected endpoints require the header:
+
 ```
 Authorization: Bearer <access_token>
 ```
@@ -381,6 +384,7 @@ Content-Type: application/json
 ```
 
 Response `201`:
+
 ```json
 {
   "id": "uuid",
@@ -402,6 +406,7 @@ Content-Type: application/json
 ```
 
 Response `200`:
+
 ```json
 {
   "access_token": "eyJ...",
@@ -462,6 +467,7 @@ Content-Type: application/json
 ```
 
 Response `201`:
+
 ```json
 {
   "id": "uuid",
@@ -570,6 +576,7 @@ Authorization: Bearer <access_token>
 ```
 
 Response:
+
 ```json
 {
   "tokens_used_today": 1234,
@@ -597,27 +604,30 @@ Authorization: Bearer <access_token>
 
 ### LLM Providers and Models
 
-| Provider | `provider` value | Example models |
-|---|---|---|
-| OpenAI | `openai` | `gpt-4o`, `gpt-4o-mini`, `o1-mini` |
-| Anthropic | `anthropic` | `claude-sonnet-4-6`, `claude-haiku-4-5-20251001` |
-| Ollama (local) | `ollama` | `llama3.2`, `mistral`, `phi3` |
+| Provider       | `provider` value | Example models                                   |
+| -------------- | ---------------- | ------------------------------------------------ |
+| OpenAI         | `openai`         | `gpt-4o`, `gpt-4o-mini`, `o1-mini`               |
+| Anthropic      | `anthropic`      | `claude-sonnet-4-6`, `claude-haiku-4-5-20251001` |
+| Ollama (local) | `ollama`         | `llama3.2`, `mistral`, `phi3`                    |
 
 ---
 
 ## Using XMPP to Chat with Agents
 
 Once you have:
-1. An XMPP account (`wande@aiox.local`)
+
+1. An XMPP account (`turing@aiox.local`)
 2. An agent created via REST API (note its `jid`, e.g. `agent-uuid@agents.aiox.local`)
 3. Connected with your XMPP client
 
 **Add the agent as a contact** in your XMPP client using its JID:
+
 ```
 agent-uuid@agents.aiox.local
 ```
 
 **Send a message** — the platform will:
+
 1. Receive the XMPP stanza via ejabberd → XMPP Component
 2. Publish it to NATS (`aiox.messages.inbound`)
 3. Orchestrator validates ownership + governance quotas
@@ -634,16 +644,16 @@ The Python worker connects to the Go API via gRPC and processes LLM tasks.
 
 ### Environment Variables
 
-| Env var | Default | Description |
-|---|---|---|
-| `WORKER_ID` | `worker-{pid}` | Unique identifier |
-| `GRPC_HOST` | `localhost` | API server hostname |
-| `GRPC_PORT` | `50051` | gRPC port |
-| `GRPC_WORKER_API_KEY` | — | Must match `GRPC_WORKER_API_KEY` in API config |
-| `MAX_CONCURRENT` | `4` | Max parallel tasks |
-| `OPENAI_API_KEY` | — | Enables OpenAI provider |
-| `ANTHROPIC_API_KEY` | — | Enables Anthropic provider |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama endpoint (always enabled) |
+| Env var               | Default                  | Description                                    |
+| --------------------- | ------------------------ | ---------------------------------------------- |
+| `WORKER_ID`           | `worker-{pid}`           | Unique identifier                              |
+| `GRPC_HOST`           | `localhost`              | API server hostname                            |
+| `GRPC_PORT`           | `50051`                  | gRPC port                                      |
+| `GRPC_WORKER_API_KEY` | —                        | Must match `GRPC_WORKER_API_KEY` in API config |
+| `MAX_CONCURRENT`      | `4`                      | Max parallel tasks                             |
+| `OPENAI_API_KEY`      | —                        | Enables OpenAI provider                        |
+| `ANTHROPIC_API_KEY`   | —                        | Enables Anthropic provider                     |
+| `OLLAMA_BASE_URL`     | `http://localhost:11434` | Ollama endpoint (always enabled)               |
 
 ### Running multiple workers
 
@@ -811,11 +821,13 @@ openssl rand -base64 48   # use output as GRPC_WORKER_API_KEY
 ### Messages not reaching the worker
 
 Check the NATS monitor to inspect stream state:
+
 ```
 http://localhost:8222/jsz?streams=true&consumers=true
 ```
 
 Check orchestrator and dispatcher logs:
+
 ```bash
 docker compose logs aiox-api | grep -E "orchestrator|dispatcher|error"
 ```
