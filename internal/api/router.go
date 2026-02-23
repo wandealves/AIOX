@@ -41,6 +41,32 @@ type HandlerSet struct {
 	ListAuditLogs      http.HandlerFunc
 	ListAgentAuditLogs http.HandlerFunc
 
+	// Chat handlers (Phase 7)
+	SendMessage       http.HandlerFunc
+	ListConversations http.HandlerFunc
+
+	// WebSocket handler (Phase 7)
+	WSUpgrade http.HandlerFunc
+
+	// Organization handlers (Phase 9)
+	CreateOrg          http.HandlerFunc
+	ListOrgs           http.HandlerFunc
+	GetOrg             http.HandlerFunc
+	UpdateOrg          http.HandlerFunc
+	DeleteOrg          http.HandlerFunc
+	ListOrgMembers     http.HandlerFunc
+	UpdateMemberRole   http.HandlerFunc
+	RemoveOrgMember    http.HandlerFunc
+	CreateOrgInvite    http.HandlerFunc
+	ListOrgInvites     http.HandlerFunc
+	DeleteOrgInvite    http.HandlerFunc
+	AcceptInvite       http.HandlerFunc
+	ListOrgAgents      http.HandlerFunc
+	CreateOrgAgent     http.HandlerFunc
+	OrgMemberMiddleware func(http.Handler) http.Handler
+	OrgAdminMiddleware  func(http.Handler) http.Handler
+	OrgOwnerMiddleware  func(http.Handler) http.Handler
+
 	// Auth middleware
 	AuthMiddleware func(http.Handler) http.Handler
 
@@ -131,6 +157,11 @@ func NewRouter(pool *pgxpool.Pool, natsClient *inats.Client, cfg RouterConfig, h
 			})
 		})
 
+		// WebSocket upgrade — auth is handled internally via query param token
+		if h.WSUpgrade != nil {
+			r.Get("/ws", h.WSUpgrade)
+		}
+
 		// Protected routes
 		r.Group(func(r chi.Router) {
 			r.Use(h.AuthMiddleware)
@@ -145,6 +176,14 @@ func NewRouter(pool *pgxpool.Pool, natsClient *inats.Client, cfg RouterConfig, h
 					r.Get("/", h.GetAgent)
 					r.Put("/", h.UpdateAgent)
 					r.Delete("/", h.DeleteAgent)
+
+					// Chat routes (Phase 7)
+					if h.SendMessage != nil {
+						r.Post("/messages", h.SendMessage)
+					}
+					if h.ListConversations != nil {
+						r.Get("/conversations", h.ListConversations)
+					}
 
 					// Memory routes (Phase 4)
 					r.Route("/memories", func(r chi.Router) {
@@ -165,6 +204,40 @@ func NewRouter(pool *pgxpool.Pool, natsClient *inats.Client, cfg RouterConfig, h
 				r.Get("/quota", h.GetUserQuota)
 				r.Get("/audit", h.ListAuditLogs)
 			})
+
+			// Organization routes (Phase 9)
+			if h.CreateOrg != nil {
+				r.Post("/orgs", h.CreateOrg)
+				r.Get("/orgs", h.ListOrgs)
+
+				r.Route("/orgs/{orgID}", func(r chi.Router) {
+					r.Use(h.OrgMemberMiddleware)
+					r.Get("/", h.GetOrg)
+					r.Get("/members", h.ListOrgMembers)
+					r.Get("/agents", h.ListOrgAgents)
+
+					// Admin+ routes
+					r.Group(func(r chi.Router) {
+						r.Use(h.OrgAdminMiddleware)
+						r.Put("/", h.UpdateOrg)
+						r.Put("/members/{userID}", h.UpdateMemberRole)
+						r.Delete("/members/{userID}", h.RemoveOrgMember)
+						r.Post("/invites", h.CreateOrgInvite)
+						r.Get("/invites", h.ListOrgInvites)
+						r.Delete("/invites/{inviteID}", h.DeleteOrgInvite)
+						r.Post("/agents", h.CreateOrgAgent)
+					})
+
+					// Owner-only routes
+					r.Group(func(r chi.Router) {
+						r.Use(h.OrgOwnerMiddleware)
+						r.Delete("/", h.DeleteOrg)
+					})
+				})
+
+				// Invite acceptance (outside org routes — user just needs auth)
+				r.Post("/invites/{token}/accept", h.AcceptInvite)
+			}
 		})
 	})
 

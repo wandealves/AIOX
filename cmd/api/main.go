@@ -14,6 +14,7 @@ import (
 	"github.com/aiox-platform/aiox/internal/agents"
 	"github.com/aiox-platform/aiox/internal/api"
 	"github.com/aiox-platform/aiox/internal/auth"
+	"github.com/aiox-platform/aiox/internal/chat"
 	"github.com/aiox-platform/aiox/internal/config"
 	"github.com/aiox-platform/aiox/internal/database"
 	"github.com/aiox-platform/aiox/internal/governance"
@@ -23,11 +24,13 @@ import (
 	"github.com/aiox-platform/aiox/internal/middleware"
 	inats "github.com/aiox-platform/aiox/internal/nats"
 	"github.com/aiox-platform/aiox/internal/orchestrator"
+	"github.com/aiox-platform/aiox/internal/orgs"
 	iredis "github.com/aiox-platform/aiox/internal/redis"
 	"github.com/aiox-platform/aiox/internal/server"
 	"github.com/aiox-platform/aiox/internal/users"
 	"github.com/aiox-platform/aiox/internal/worker"
 	pb "github.com/aiox-platform/aiox/internal/worker/workerpb"
+	iws "github.com/aiox-platform/aiox/internal/ws"
 	ixmpp "github.com/aiox-platform/aiox/internal/xmpp"
 )
 
@@ -153,6 +156,20 @@ func main() {
 		cfg.GRPC.TaskTimeoutSec,
 	)
 
+	// Organizations (Phase 9)
+	orgsRepo := orgs.NewRepository(pool)
+	orgsSvc := orgs.NewService(orgsRepo)
+	orgsHandler := orgs.NewHandler(orgsSvc)
+
+	// Chat (Phase 7)
+	chatRepo := chat.NewRepository(pool)
+	chatHandler := chat.NewHandler(chatRepo, publisher)
+
+	// WebSocket (Phase 7)
+	wsHub := iws.NewHub()
+	wsHandler := iws.NewHandler(wsHub, jwtManager, publisher)
+	wsRelay := iws.NewRelay(wsHub, consumerMgr)
+
 	// Auth rate limiter
 	authRateLimiter := middleware.NewRateLimiter(redisClient, 20, 60)
 
@@ -182,6 +199,29 @@ func main() {
 		GetUserQuota:       govHandler.GetQuota,
 		ListAuditLogs:      govHandler.ListAuditLogs,
 		ListAgentAuditLogs: govHandler.ListAgentAuditLogs,
+
+		SendMessage:       chatHandler.SendMessage,
+		ListConversations: chatHandler.ListConversations,
+
+		WSUpgrade: wsHandler.Upgrade,
+
+		CreateOrg:           orgsHandler.CreateOrg,
+		ListOrgs:            orgsHandler.ListOrgs,
+		GetOrg:              orgsHandler.GetOrg,
+		UpdateOrg:           orgsHandler.UpdateOrg,
+		DeleteOrg:           orgsHandler.DeleteOrg,
+		ListOrgMembers:      orgsHandler.ListMembers,
+		UpdateMemberRole:    orgsHandler.UpdateMemberRole,
+		RemoveOrgMember:     orgsHandler.RemoveMember,
+		CreateOrgInvite:     orgsHandler.CreateInvite,
+		ListOrgInvites:      orgsHandler.ListInvites,
+		DeleteOrgInvite:     orgsHandler.DeleteInvite,
+		AcceptInvite:        orgsHandler.AcceptInvite,
+		ListOrgAgents:       orgsHandler.ListOrgAgents,
+		CreateOrgAgent:      orgsHandler.CreateOrgAgent,
+		OrgMemberMiddleware: orgs.OrgMemberMiddleware(orgsSvc),
+		OrgAdminMiddleware:  orgs.OrgRoleMiddleware(orgs.RoleAdmin),
+		OrgOwnerMiddleware:  orgs.OrgRoleMiddleware(orgs.RoleOwner),
 
 		AuthMiddleware: auth.Middleware(authSvc),
 
@@ -248,6 +288,22 @@ func main() {
 		slog.Info("starting audit consumer")
 		if err := auditConsumer.Start(ctx); err != nil {
 			slog.Error("audit consumer error", "error", err)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		slog.Info("starting WebSocket hub")
+		wsHub.Run(ctx)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		slog.Info("starting WebSocket outbound relay")
+		if err := wsRelay.Start(ctx); err != nil {
+			slog.Error("ws relay error", "error", err)
 		}
 	}()
 

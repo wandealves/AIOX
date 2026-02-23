@@ -216,6 +216,7 @@ func (s *Service) rowToAgent(row *AgentRow) (*Agent, error) {
 	return &Agent{
 		ID:           row.ID,
 		OwnerUserID:  row.OwnerUserID,
+		OrgID:        row.OrgID,
 		JID:          row.JID,
 		Profile:      profile,
 		LLMConfig:    row.LLMConfig,

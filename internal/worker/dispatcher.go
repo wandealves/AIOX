@@ -30,6 +30,7 @@ type pendingTask struct {
 	AgentName    string
 	WorkerID     string
 	Input        string
+	Channel      string
 	DispatchedAt time.Time
 	MemoryConfig memory.MemoryConfig
 }
@@ -249,6 +250,7 @@ func (d *Dispatcher) handleTask(ctx context.Context, msg jetstream.Msg) {
 		AgentName:    task.AgentName,
 		WorkerID:     worker.WorkerID,
 		Input:        task.Message,
+		Channel:      task.Channel,
 		DispatchedAt: time.Now(),
 		MemoryConfig: memCfg,
 	}
@@ -310,6 +312,7 @@ func (d *Dispatcher) handleResult(ctx context.Context, resp *pb.TaskResponse) {
 		FromJID:   pt.AgentJID,
 		Body:      body,
 		InReplyTo: pt.RequestID,
+		Channel:   pt.Channel,
 	}
 	if err := d.publisher.PublishOutboundMessage(ctx, outbound); err != nil {
 		slog.Error("dispatcher: publishing outbound", "error", err)
@@ -440,6 +443,7 @@ func (d *Dispatcher) expireStale(ctx context.Context) {
 			FromJID:   pt.AgentJID,
 			Body:      "Sorry, the request timed out. Please try again.",
 			InReplyTo: pt.RequestID,
+			Channel:   pt.Channel,
 		}
 		if err := d.publisher.PublishOutboundMessage(ctx, outbound); err != nil {
 			slog.Error("dispatcher: publishing timeout response", "error", err)
@@ -475,6 +479,7 @@ func (d *Dispatcher) sendErrorResponse(ctx context.Context, task inats.TaskMessa
 		FromJID:   task.AgentJID,
 		Body:      "Error: " + errMsg,
 		InReplyTo: task.RequestID,
+		Channel:   task.Channel,
 	}
 	if err := d.publisher.PublishOutboundMessage(ctx, outbound); err != nil {
 		slog.Error("dispatcher: publishing error response", "error", err)

@@ -18,11 +18,18 @@ const (
 
 // Subject constants.
 const (
-	SubjectInboundMessage  = "aiox.messages.inbound"
-	SubjectOutboundMessage = "aiox.messages.outbound"
-	SubjectTaskPrefix      = "aiox.tasks"     // aiox.tasks.{agent_id}
-	SubjectAgentEvent      = "aiox.events.agent"
-	SubjectAuditEvent      = "aiox.events.audit"
+	SubjectInboundMessage    = "aiox.messages.inbound"
+	SubjectOutboundMessage   = "aiox.messages.outbound"
+	SubjectOutboundMessageWS = "aiox.messages.outbound.ws"
+	SubjectTaskPrefix        = "aiox.tasks" // aiox.tasks.{agent_id}
+	SubjectAgentEvent        = "aiox.events.agent"
+	SubjectAuditEvent        = "aiox.events.audit"
+)
+
+// Channel constants for message routing.
+const (
+	ChannelXMPP = ""   // default: XMPP delivery
+	ChannelWS   = "ws" // WebSocket delivery
 )
 
 // InboundMessage is published when an XMPP message arrives at the component.
@@ -33,15 +40,17 @@ type InboundMessage struct {
 	Body       string    `json:"body"`
 	StanzaType string    `json:"stanza_type"`
 	ReceivedAt time.Time `json:"received_at"`
+	Channel    string    `json:"channel,omitempty"` // "" = XMPP, "ws" = WebSocket
 }
 
-// OutboundMessage is published to send a message back via XMPP.
+// OutboundMessage is published to send a message back via XMPP or WebSocket.
 type OutboundMessage struct {
 	ID        string `json:"id"`
 	ToJID     string `json:"to_jid"`
 	FromJID   string `json:"from_jid"`
 	Body      string `json:"body"`
 	InReplyTo string `json:"in_reply_to,omitempty"`
+	Channel   string `json:"channel,omitempty"`
 }
 
 // TaskMessage is published for agent task processing via Python workers.
@@ -53,6 +62,7 @@ type TaskMessage struct {
 	FromJID     string    `json:"from_jid"`
 	AgentJID    string    `json:"agent_jid"`
 	AgentName   string    `json:"agent_name"`
+	Channel     string    `json:"channel,omitempty"`
 }
 
 // AgentEvent is published for agent lifecycle events.

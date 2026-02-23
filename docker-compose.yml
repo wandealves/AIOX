@@ -123,6 +123,26 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  aiox-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: aiox-frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://aiox-api:8080
+      NEXT_PUBLIC_WS_URL: ws://aiox-api:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      aiox-api:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+
 volumes:
   postgres_data:
   redis_data:

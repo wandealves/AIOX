@@ -1,0 +1,2 @@
+ALTER TABLE user_quotas DROP COLUMN IF EXISTS org_id;
+ALTER TABLE agents DROP COLUMN IF EXISTS org_id;

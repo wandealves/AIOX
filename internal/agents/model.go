@@ -10,6 +10,7 @@ import (
 type Agent struct {
 	ID           uuid.UUID        `json:"id"`
 	OwnerUserID  uuid.UUID        `json:"owner_user_id"`
+	OrgID        *uuid.UUID       `json:"org_id,omitempty"`
 	JID          string           `json:"jid"`
 	Profile      AgentProfile     `json:"profile"`
 	LLMConfig    json.RawMessage  `json:"llm_config"`
@@ -34,6 +35,7 @@ type AgentProfile struct {
 type AgentRow struct {
 	ID           uuid.UUID
 	OwnerUserID  uuid.UUID
+	OrgID        *uuid.UUID
 	JID          string
 	Profile      []byte
 	LLMConfig    []byte

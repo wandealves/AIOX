@@ -26,11 +26,14 @@ import (
 	"github.com/aiox-platform/aiox/internal/agents"
 	"github.com/aiox-platform/aiox/internal/api"
 	"github.com/aiox-platform/aiox/internal/auth"
+	"github.com/aiox-platform/aiox/internal/chat"
 	"github.com/aiox-platform/aiox/internal/config"
 	"github.com/aiox-platform/aiox/internal/governance"
 	"github.com/aiox-platform/aiox/internal/governance/audit"
 	"github.com/aiox-platform/aiox/internal/governance/quota"
 	"github.com/aiox-platform/aiox/internal/memory"
+	inats "github.com/aiox-platform/aiox/internal/nats"
+	"github.com/aiox-platform/aiox/internal/orgs"
 	"github.com/aiox-platform/aiox/internal/users"
 )
 
@@ -158,6 +161,16 @@ func SetupTestEnv(t *testing.T) *TestEnv {
 	auditRepo := audit.NewRepository(pool)
 	govHandler := governance.NewHandler(quotaSvc, auditRepo)
 
+	// Chat (Phase 7) — publisher is nil since there's no NATS in tests;
+	// SendMessage requires NATS so will error, but ListConversations works.
+	chatRepo := chat.NewRepository(pool)
+	chatHandler := chat.NewHandler(chatRepo, (*inats.Publisher)(nil))
+
+	// Organizations (Phase 9)
+	orgsRepo := orgs.NewRepository(pool)
+	orgsSvc := orgs.NewService(orgsRepo)
+	orgsHandler := orgs.NewHandler(orgsSvc)
+
 	router := api.NewRouter(pool, nil, api.RouterConfig{}, api.HandlerSet{
 		Register: authHandler.Register,
 		Login:    authHandler.Login,
@@ -180,6 +193,26 @@ func SetupTestEnv(t *testing.T) *TestEnv {
 		GetUserQuota:       govHandler.GetQuota,
 		ListAuditLogs:      govHandler.ListAuditLogs,
 		ListAgentAuditLogs: govHandler.ListAgentAuditLogs,
+
+		ListConversations: chatHandler.ListConversations,
+
+		CreateOrg:           orgsHandler.CreateOrg,
+		ListOrgs:            orgsHandler.ListOrgs,
+		GetOrg:              orgsHandler.GetOrg,
+		UpdateOrg:           orgsHandler.UpdateOrg,
+		DeleteOrg:           orgsHandler.DeleteOrg,
+		ListOrgMembers:      orgsHandler.ListMembers,
+		UpdateMemberRole:    orgsHandler.UpdateMemberRole,
+		RemoveOrgMember:     orgsHandler.RemoveMember,
+		CreateOrgInvite:     orgsHandler.CreateInvite,
+		ListOrgInvites:      orgsHandler.ListInvites,
+		DeleteOrgInvite:     orgsHandler.DeleteInvite,
+		AcceptInvite:        orgsHandler.AcceptInvite,
+		ListOrgAgents:       orgsHandler.ListOrgAgents,
+		CreateOrgAgent:      orgsHandler.CreateOrgAgent,
+		OrgMemberMiddleware: orgs.OrgMemberMiddleware(orgsSvc),
+		OrgAdminMiddleware:  orgs.OrgRoleMiddleware(orgs.RoleAdmin),
+		OrgOwnerMiddleware:  orgs.OrgRoleMiddleware(orgs.RoleOwner),
 
 		AuthMiddleware: auth.Middleware(authSvc),
 	})

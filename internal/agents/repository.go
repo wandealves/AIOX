@@ -29,11 +29,11 @@ func NewRepository(pool *pgxpool.Pool) Repository {
 
 func (r *postgresRepository) Create(ctx context.Context, row *AgentRow) error {
 	query := `
-		INSERT INTO agents (id, owner_user_id, jid, profile, llm_config, capabilities, memory_config, governance, visibility, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
+		INSERT INTO agents (id, owner_user_id, org_id, jid, profile, llm_config, capabilities, memory_config, governance, visibility, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
 
 	_, err := r.pool.Exec(ctx, query,
-		row.ID, row.OwnerUserID, row.JID,
+		row.ID, row.OwnerUserID, row.OrgID, row.JID,
 		row.Profile, row.LLMConfig, row.Capabilities,
 		row.MemoryConfig, row.Governance, row.Visibility,
 		row.CreatedAt, row.UpdatedAt)
@@ -45,13 +45,13 @@ func (r *postgresRepository) Create(ctx context.Context, row *AgentRow) error {
 
 func (r *postgresRepository) GetByID(ctx context.Context, id uuid.UUID) (*AgentRow, error) {
 	query := `
-		SELECT id, owner_user_id, jid, profile, llm_config, capabilities, memory_config, governance, visibility, created_at, updated_at, deleted_at
+		SELECT id, owner_user_id, org_id, jid, profile, llm_config, capabilities, memory_config, governance, visibility, created_at, updated_at, deleted_at
 		FROM agents
 		WHERE id = $1 AND deleted_at IS NULL`
 
 	row := &AgentRow{}
 	err := r.pool.QueryRow(ctx, query, id).Scan(
-		&row.ID, &row.OwnerUserID, &row.JID,
+		&row.ID, &row.OwnerUserID, &row.OrgID, &row.JID,
 		&row.Profile, &row.LLMConfig, &row.Capabilities,
 		&row.MemoryConfig, &row.Governance, &row.Visibility,
 		&row.CreatedAt, &row.UpdatedAt, &row.DeletedAt)
@@ -66,7 +66,7 @@ func (r *postgresRepository) GetByID(ctx context.Context, id uuid.UUID) (*AgentR
 
 func (r *postgresRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID, limit, offset int) ([]*AgentRow, error) {
 	query := `
-		SELECT id, owner_user_id, jid, profile, llm_config, capabilities, memory_config, governance, visibility, created_at, updated_at, deleted_at
+		SELECT id, owner_user_id, org_id, jid, profile, llm_config, capabilities, memory_config, governance, visibility, created_at, updated_at, deleted_at
 		FROM agents
 		WHERE owner_user_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at DESC
@@ -82,7 +82,7 @@ func (r *postgresRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID,
 	for rows.Next() {
 		row := &AgentRow{}
 		err := rows.Scan(
-			&row.ID, &row.OwnerUserID, &row.JID,
+			&row.ID, &row.OwnerUserID, &row.OrgID, &row.JID,
 			&row.Profile, &row.LLMConfig, &row.Capabilities,
 			&row.MemoryConfig, &row.Governance, &row.Visibility,
 			&row.CreatedAt, &row.UpdatedAt, &row.DeletedAt)

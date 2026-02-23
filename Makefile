@@ -1,4 +1,4 @@
-.PHONY: build dev run test test-integration up down migrate-up migrate-down migrate-create lint clean proto docker-build vet fmt fmt-check security check
+.PHONY: build dev run test test-integration up down migrate-up migrate-down migrate-create lint clean proto docker-build vet fmt fmt-check security check frontend-install frontend-dev frontend-build
 
 # Variables
 APP_NAME=aiox-api
@@ -79,6 +79,16 @@ proto:
 		--go_out=internal/worker/workerpb --go_opt=paths=source_relative \
 		--go-grpc_out=internal/worker/workerpb --go-grpc_opt=paths=source_relative \
 		worker.proto
+
+# Frontend
+frontend-install:
+	cd frontend && npm install
+
+frontend-dev:
+	cd frontend && npm run dev
+
+frontend-build:
+	cd frontend && npm run build
 
 # Clean
 clean:

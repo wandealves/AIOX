@@ -119,6 +119,7 @@ func (o *Orchestrator) processMessage(ctx context.Context, msg jetstream.Msg) {
 		FromJID:     inbound.FromJID,
 		AgentJID:    route.AgentJID,
 		AgentName:   route.AgentName,
+		Channel:     inbound.Channel,
 	}
 	if err := o.publisher.PublishTask(ctx, route.AgentID.String(), task); err != nil {
 		slog.Error("publishing task", "error", err)
@@ -148,6 +149,7 @@ func (o *Orchestrator) sendErrorResponse(ctx context.Context, inbound inats.Inbo
 		FromJID:   inbound.ToJID,
 		Body:      "Error: " + errMsg,
 		InReplyTo: inbound.ID,
+		Channel:   inbound.Channel,
 	}
 	if err := o.publisher.PublishOutboundMessage(ctx, outbound); err != nil {
 		slog.Error("publishing error response", "error", err)

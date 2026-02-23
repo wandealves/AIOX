@@ -1,6 +1,6 @@
 # AIOX — Multi-Agent AI Platform
 
-AIOX is a production-ready multi-agent AI platform built in Go. Users interact with AI agents over **XMPP** (or REST); agents run in isolated **Python workers** connected via **gRPC**, with **NATS JetStream** as the async message bus, **PostgreSQL** for persistence and vector memory, and **Redis** for caching and rate limiting.
+AIOX is a production-ready multi-agent AI platform built in Go. Users interact with AI agents over **XMPP**, **REST API**, or a **real-time WebSocket chat**; agents run in isolated **Python workers** connected via **gRPC**, with **NATS JetStream** as the async message bus, **PostgreSQL** for persistence and vector memory, and **Redis** for caching and rate limiting. A **Next.js dashboard** provides a web UI for agent management, conversations, and governance monitoring.
 
 ---
 
@@ -9,11 +9,14 @@ AIOX is a production-ready multi-agent AI platform built in Go. Users interact w
 - [Architecture](#architecture)
 - [Prerequisites](#prerequisites)
 - [Quick Start (Docker)](#quick-start-docker)
+- [Frontend Dashboard](#frontend-dashboard)
 - [TLS Setup for XMPP Clients](#tls-setup-for-xmpp-clients)
 - [Registering XMPP Users](#registering-xmpp-users)
 - [Local Development](#local-development)
 - [Configuration Reference](#configuration-reference)
 - [REST API Reference](#rest-api-reference)
+- [WebSocket Chat](#websocket-chat)
+- [Organizations (Multi-Tenancy)](#organizations-multi-tenancy)
 - [Using XMPP to Chat with Agents](#using-xmpp-to-chat-with-agents)
 - [Python Worker](#python-worker)
 - [Make Targets](#make-targets)
@@ -26,35 +29,42 @@ AIOX is a production-ready multi-agent AI platform built in Go. Users interact w
 ## Architecture
 
 ```
-User ──XMPP──► ejabberd ──► XMPP Component ──► NATS (inbound)
-                                                      │
-                                               Orchestrator
-                                          (validate · route · quota)
-                                                      │
-                                             NATS (aiox.tasks.*)
-                                                      │
-                                               Dispatcher
-                                       (agent fetch · memory context)
-                                                      │
-                                         gRPC ──► Python Worker
-                                          (OpenAI · Anthropic · Ollama)
-                                                      │
-                                             NATS (outbound)
-                                                      │
-                                       Outbound Relay ──► XMPP ──► User
+                  ┌─────────────────────────────────────────────────────┐
+                  │                    NATS JetStream                   │
+                  │  inbound ──► Orchestrator ──► tasks ──► Dispatcher  │
+                  │              (validate·route·quota)   (agent+memory)│
+                  └──────┬─────────────────────────────────────┬────────┘
+                         │                                     │
+                         ▲                                     ▼
+                         │                              gRPC ──► Python Worker
+                         │                              (OpenAI · Anthropic · Ollama)
+                         │                                     │
+                         │                              NATS (outbound)
+                         │                                ┌────┴────┐
+User ──XMPP──► ejabberd ──► XMPP Component               │         │
+                                  ▲                       │         │
+                                  └── XMPP Relay ◄────────┘         │
+                                                                    │
+Browser ──► Next.js Dashboard ──► REST API                          │
+                   │                  │                              │
+                   │             POST /messages ──► NATS (inbound)   │
+                   │                                                │
+                   └──── WebSocket ◄──── WS Relay ◄─────────────────┘
 ```
 
 ### Stack
 
-| Layer                 | Technology               |
-| --------------------- | ------------------------ |
-| HTTP API              | Go + chi                 |
-| Async messaging       | NATS JetStream           |
-| XMPP server           | ejabberd                 |
-| AI workers            | Python 3.12 + gRPC       |
-| Database              | PostgreSQL 16 + pgvector |
-| Cache / Rate limiting | Redis 7                  |
-| Metrics               | Prometheus               |
+| Layer                 | Technology                      |
+| --------------------- | ------------------------------- |
+| Frontend              | Next.js 14 + TypeScript + Tailwind |
+| HTTP API              | Go + chi                        |
+| Real-time             | WebSocket (nhooyr.io/websocket) |
+| Async messaging       | NATS JetStream                  |
+| XMPP server           | ejabberd                        |
+| AI workers            | Python 3.12 + gRPC              |
+| Database              | PostgreSQL 16 + pgvector        |
+| Cache / Rate limiting | Redis 7                         |
+| Metrics               | Prometheus                      |
 
 ---
 
@@ -65,6 +75,7 @@ User ──XMPP──► ejabberd ──► XMPP Component ──► NATS (inbou
 | Docker         | 24+             | All services                                    |
 | Docker Compose | v2              | Orchestration                                   |
 | Go             | 1.24            | Local dev / unit tests                          |
+| Node.js        | 20+             | Frontend local dev                              |
 | Python         | 3.12            | Worker local dev                                |
 | `openssl`      | any             | TLS certificate generation                      |
 | An XMPP client | —               | Chat with agents (e.g. [Dino](https://dino.im)) |
@@ -129,14 +140,15 @@ make up
 
 Services started:
 
-| Service     | Port(s)          | Description                         |
-| ----------- | ---------------- | ----------------------------------- |
-| PostgreSQL  | 5433             | Primary database                    |
-| Redis       | 6379             | Cache + rate limiting               |
-| NATS        | 4222, 8222       | Message bus (HTTP monitor at :8222) |
-| ejabberd    | 5222, 5275, 5280 | XMPP server                         |
-| aiox-api    | 8080, 50051      | REST API + gRPC                     |
-| aiox-worker | —                | Python AI worker                    |
+| Service        | Port(s)          | Description                         |
+| -------------- | ---------------- | ----------------------------------- |
+| PostgreSQL     | 5433             | Primary database                    |
+| Redis          | 6379             | Cache + rate limiting               |
+| NATS           | 4222, 8222       | Message bus (HTTP monitor at :8222) |
+| ejabberd       | 5222, 5275, 5280 | XMPP server                         |
+| aiox-api       | 8080, 50051      | REST API + gRPC + WebSocket         |
+| aiox-worker    | —                | Python AI worker                    |
+| aiox-frontend  | 3000             | Next.js dashboard                   |
 
 ### 5. Verify all services are healthy
 
@@ -155,6 +167,52 @@ Expected response:
   "workers": 1
 }
 ```
+
+---
+
+## Frontend Dashboard
+
+AIOX includes a **Next.js 14** web dashboard for managing agents, chatting in real-time, and monitoring governance.
+
+### Pages
+
+| Page | Path | Description |
+| ---- | ---- | ----------- |
+| Login | `/login` | Email + password authentication |
+| Register | `/register` | New account creation |
+| Dashboard | `/dashboard` | Overview with agent count, token usage, request stats |
+| Agents | `/agents` | List, create, edit, delete agents |
+| Agent Chat | `/agents/{id}/chat` | Real-time chat via WebSocket |
+| Quotas | `/governance/quota` | Token and request usage visualization |
+| Audit Logs | `/governance/audit` | Filterable audit log viewer |
+| Admin Users | `/admin/users` | User management (admin only) |
+| Admin Stats | `/admin/stats` | Platform-wide statistics (admin only) |
+
+### Running locally
+
+```bash
+cd frontend
+npm install
+npm run dev
+# Dashboard available at http://localhost:3000
+```
+
+### Environment variables
+
+Create `frontend/.env.local`:
+
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:8080
+NEXT_PUBLIC_WS_URL=ws://localhost:8080
+```
+
+### Chat flow
+
+1. User opens `/agents/{id}/chat`
+2. History loads via `GET /api/v1/agents/{id}/conversations`
+3. WebSocket connects to `ws://host/api/v1/ws?token=<JWT>`
+4. User sends a message via `POST /api/v1/agents/{id}/messages` (returns 202 + request_id)
+5. Agent response arrives via WebSocket and renders in real-time
 
 ---
 
@@ -602,6 +660,153 @@ Authorization: Bearer <access_token>
 
 ---
 
+### Chat (REST + WebSocket)
+
+#### Send Message to Agent
+
+```http
+POST /api/v1/agents/{agentID}/messages
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{
+  "body": "Hello, what can you help me with?"
+}
+```
+
+Response `202`:
+
+```json
+{
+  "data": {
+    "request_id": "ws-uuid-20240101120000.000",
+    "status": "accepted"
+  }
+}
+```
+
+The agent's response will arrive via WebSocket (see below).
+
+#### List Conversations
+
+```http
+GET /api/v1/agents/{agentID}/conversations?page=1&page_size=20
+Authorization: Bearer <access_token>
+```
+
+---
+
+### WebSocket Chat
+
+Connect to the WebSocket endpoint for real-time agent responses:
+
+```
+ws://localhost:8080/api/v1/ws?token=<JWT_access_token>
+```
+
+**Receiving messages** (server → client):
+
+```json
+{
+  "type": "message",
+  "agent_id": "uuid",
+  "body": "Here's what I can help you with...",
+  "request_id": "ws-uuid-20240101120000.000"
+}
+```
+
+**Sending messages** (client → server):
+
+```json
+{
+  "type": "message",
+  "agent_id": "uuid",
+  "body": "Tell me more"
+}
+```
+
+---
+
+### Organizations (Multi-Tenancy)
+
+Organizations allow grouping users and agents together with role-based access control.
+
+**Roles** (highest to lowest): `owner` > `admin` > `editor` > `viewer`
+
+#### Create Organization
+
+```http
+POST /api/v1/orgs
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{
+  "name": "My Team",
+  "slug": "my-team",
+  "description": "Our AI workspace"
+}
+```
+
+Response `201`: The creator is automatically added as `owner`.
+
+#### List My Organizations
+
+```http
+GET /api/v1/orgs
+Authorization: Bearer <access_token>
+```
+
+#### Organization Detail / Update / Delete
+
+```http
+GET    /api/v1/orgs/{orgID}            # Any member
+PUT    /api/v1/orgs/{orgID}            # Admin+
+DELETE /api/v1/orgs/{orgID}            # Owner only
+```
+
+#### Members
+
+```http
+GET    /api/v1/orgs/{orgID}/members              # Any member
+PUT    /api/v1/orgs/{orgID}/members/{userID}      # Admin+ (change role)
+DELETE /api/v1/orgs/{orgID}/members/{userID}      # Admin+ (remove member)
+```
+
+Role update body:
+
+```json
+{ "role": "editor" }
+```
+
+#### Invites
+
+```http
+POST   /api/v1/orgs/{orgID}/invites        # Admin+ (create invite)
+GET    /api/v1/orgs/{orgID}/invites         # Admin+ (list invites)
+DELETE /api/v1/orgs/{orgID}/invites/{id}    # Admin+ (cancel invite)
+POST   /api/v1/invites/{token}/accept       # Any authenticated user
+```
+
+Create invite body:
+
+```json
+{
+  "email": "colleague@example.com",
+  "role": "editor"
+}
+```
+
+Invites expire after 7 days.
+
+#### Organization Agents
+
+```http
+GET  /api/v1/orgs/{orgID}/agents            # Any member
+POST /api/v1/orgs/{orgID}/agents            # Editor+
+```
+
+---
+
 ### LLM Providers and Models
 
 | Provider       | `provider` value | Example models                                   |
@@ -672,27 +877,31 @@ The Go API's **worker pool** automatically distributes tasks using least-loaded 
 ## Make Targets
 
 ```bash
-make build           # Compile to ./bin/aiox-api
-make dev             # Run API with go run (hot-reload friendly)
-make up              # docker compose up -d (all services)
-make down            # docker compose down
-make docker-build    # Build Go API Docker image
+make build              # Compile to ./bin/aiox-api
+make dev                # Run API with go run (hot-reload friendly)
+make up                 # docker compose up -d (all services)
+make down               # docker compose down
+make docker-build       # Build Go API Docker image
 
-make test            # Unit tests (no Docker needed)
-make test-integration # Integration tests (requires Docker)
-make test-coverage   # Coverage report → coverage.html
+make test               # Unit tests (no Docker needed)
+make test-integration   # Integration tests (requires Docker)
+make test-coverage      # Coverage report → coverage.html
 
-make migrate-up      # Apply all pending DB migrations
-make migrate-create  # Create a new migration (prompts for name)
+make migrate-up         # Apply all pending DB migrations
+make migrate-create     # Create a new migration (prompts for name)
 
-make vet             # go vet ./...
-make fmt             # gofmt -w .
-make fmt-check       # Verify formatting (CI-safe)
-make lint            # golangci-lint
-make security        # govulncheck
-make check           # fmt-check + vet + test
+make vet                # go vet ./...
+make fmt                # gofmt -w .
+make fmt-check          # Verify formatting (CI-safe)
+make lint               # golangci-lint
+make security           # govulncheck
+make check              # fmt-check + vet + test
 
-make proto           # Regenerate gRPC code from worker.proto
+make proto              # Regenerate gRPC code from worker.proto
+
+make frontend-install   # Install frontend dependencies
+make frontend-dev       # Run frontend dev server (port 3000)
+make frontend-build     # Build frontend for production
 ```
 
 ---
@@ -741,6 +950,9 @@ aiox/
 │   ├── api/                     # HTTP router, response helpers
 │   ├── auth/                    # JWT, bcrypt, AES-256-GCM
 │   ├── agents/                  # Agent CRUD + ownership middleware
+│   ├── chat/                    # REST chat (send message, list conversations)
+│   ├── ws/                      # WebSocket hub, conn, handler, relay
+│   ├── orgs/                    # Organizations (multi-tenancy)
 │   ├── config/                  # Koanf config + validation
 │   ├── database/                # pgxpool + auto-migration
 │   ├── redis/                   # Redis client
@@ -753,6 +965,15 @@ aiox/
 │   ├── middleware/              # Logging, CORS, security headers, metrics
 │   ├── metrics/                 # Prometheus metric definitions
 │   └── users/                   # User model + repository
+├── frontend/                    # Next.js 14 dashboard
+│   ├── src/
+│   │   ├── app/                 # App Router pages (14 routes)
+│   │   ├── components/          # UI components (chat, agents, governance)
+│   │   ├── hooks/               # React Query + WebSocket hooks
+│   │   ├── lib/                 # API client, WS client, types
+│   │   └── providers/           # Auth + Query providers
+│   ├── Dockerfile               # Multi-stage Node.js image
+│   └── .env.local.example       # Frontend env template
 ├── worker/                      # Python AI worker
 │   ├── Dockerfile
 │   ├── requirements.txt
@@ -764,7 +985,7 @@ aiox/
 │       ├── memory.py            # Memory context builder
 │       └── llm/                 # OpenAI, Anthropic, Ollama providers
 ├── proto/worker/v1/worker.proto # gRPC service definition
-├── migrations/                  # 10 SQL migrations (golang-migrate)
+├── migrations/                  # 16 SQL migrations (golang-migrate)
 ├── tests/integration/           # Integration test suite
 ├── docker/
 │   ├── ejabberd/
@@ -774,7 +995,7 @@ aiox/
 │   └── postgres/init.sql        # DB initialization
 ├── .github/workflows/ci.yml     # GitHub Actions: test + lint + build
 ├── Dockerfile                   # Multi-stage Go API image
-├── docker-compose.yml           # Full stack
+├── docker-compose.yml           # Full stack (API + frontend + infra)
 ├── Makefile
 └── .env.example                 # Configuration template
 ```

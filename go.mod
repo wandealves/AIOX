@@ -25,6 +25,7 @@ require (
 	google.golang.org/grpc v1.79.1
 	google.golang.org/protobuf v1.36.11
 	gosrc.io/xmpp v0.5.1
+	nhooyr.io/websocket v1.6.5
 )
 
 require (
@@ -107,5 +108,4 @@ require (
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260209200024-4cfbd4190f57 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	nhooyr.io/websocket v1.6.5 // indirect
 )

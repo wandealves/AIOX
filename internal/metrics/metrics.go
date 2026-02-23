@@ -41,6 +41,27 @@ var (
 			Help: "Number of connected gRPC workers.",
 		},
 	)
+
+	WSConnectionsActive = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "aiox_ws_connections_active",
+			Help: "Number of active WebSocket connections.",
+		},
+	)
+
+	WSMessagesReceivedTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "aiox_ws_messages_received_total",
+			Help: "Total number of messages received from WebSocket clients.",
+		},
+	)
+
+	WSMessagesSentTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "aiox_ws_messages_sent_total",
+			Help: "Total number of messages sent to WebSocket clients.",
+		},
+	)
 )
 
 func init() {
@@ -50,5 +71,8 @@ func init() {
 		TasksDispatchedTotal,
 		TasksCompletedTotal,
 		WorkerPoolConnected,
+		WSConnectionsActive,
+		WSMessagesReceivedTotal,
+		WSMessagesSentTotal,
 	)
 }

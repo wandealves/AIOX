@@ -23,9 +23,14 @@ func (p *Publisher) PublishInboundMessage(ctx context.Context, msg InboundMessag
 	return p.publish(ctx, SubjectInboundMessage, msg)
 }
 
-// PublishOutboundMessage publishes an outbound message for XMPP delivery.
+// PublishOutboundMessage publishes an outbound message, routing by channel.
+// If msg.Channel is "ws", it publishes to the WebSocket subject; otherwise to XMPP.
 func (p *Publisher) PublishOutboundMessage(ctx context.Context, msg OutboundMessage) error {
-	return p.publish(ctx, SubjectOutboundMessage, msg)
+	subject := SubjectOutboundMessage
+	if msg.Channel == ChannelWS {
+		subject = SubjectOutboundMessageWS
+	}
+	return p.publish(ctx, subject, msg)
 }
 
 // PublishTask publishes a task for a specific agent (future Python worker processing).
