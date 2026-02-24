@@ -1,0 +1,43 @@
+groups:
+  - name: aiox-alerts
+    rules:
+      - alert: NoWorkersConnected
+        expr: aiox_worker_pool_connected == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No gRPC workers connected"
+          description: "The worker pool has 0 connected workers for more than 2 minutes."
+
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(aiox_tasks_completed_total{status="error"}[5m]))
+            /
+            sum(rate(aiox_tasks_completed_total[5m]))
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High task error rate (>10%)"
+          description: "More than 10% of tasks are failing over the last 5 minutes."
+
+      - alert: CircuitBreakerOpen
+        expr: aiox_circuit_breaker_state == 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Circuit breaker is open"
+          description: "The gRPC circuit breaker has been open for more than 1 minute."
+
+      - alert: DLQMessagesAccumulating
+        expr: sum(increase(aiox_dlq_messages_total[1h])) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DLQ messages accumulating"
+          description: "More than 10 messages have been routed to the DLQ in the last hour."

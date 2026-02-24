@@ -1,0 +1,136 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "HTTP Request Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(aiox_http_requests_total[5m])) by (method)",
+          "legendFormat": "{{ method }}"
+        }
+      ]
+    },
+    {
+      "title": "HTTP Request Duration (p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(aiox_http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "title": "Task Throughput",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(aiox_tasks_dispatched_total[5m])",
+          "legendFormat": "dispatched"
+        },
+        {
+          "expr": "sum(rate(aiox_tasks_completed_total[5m])) by (status)",
+          "legendFormat": "{{ status }}"
+        }
+      ]
+    },
+    {
+      "title": "Worker Pool",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "aiox_worker_pool_connected",
+          "legendFormat": "connected workers"
+        }
+      ]
+    },
+    {
+      "title": "Circuit Breaker State",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 8 },
+      "targets": [
+        {
+          "expr": "aiox_circuit_breaker_state",
+          "legendFormat": "state"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "CLOSED" } } },
+            { "type": "value", "options": { "1": { "text": "OPEN" } } },
+            { "type": "value", "options": { "2": { "text": "HALF-OPEN" } } }
+          ]
+        }
+      }
+    },
+    {
+      "title": "Error Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum(rate(aiox_http_requests_total{status=~\"5..\"}[5m])) / sum(rate(aiox_http_requests_total[5m]))",
+          "legendFormat": "HTTP 5xx rate"
+        },
+        {
+          "expr": "sum(rate(aiox_tasks_completed_total{status=\"error\"}[5m])) / sum(rate(aiox_tasks_completed_total[5m]))",
+          "legendFormat": "Task error rate"
+        }
+      ]
+    },
+    {
+      "title": "DLQ Messages",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum(rate(aiox_dlq_messages_total[5m])) by (source)",
+          "legendFormat": "{{ source }}"
+        }
+      ]
+    },
+    {
+      "title": "WebSocket Connections",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "expr": "aiox_ws_connections_active",
+          "legendFormat": "active"
+        }
+      ]
+    },
+    {
+      "title": "WebSocket Messages",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "targets": [
+        {
+          "expr": "rate(aiox_ws_messages_sent_total[5m])",
+          "legendFormat": "sent/s"
+        },
+        {
+          "expr": "rate(aiox_ws_messages_received_total[5m])",
+          "legendFormat": "received/s"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["aiox"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "AIOX Overview",
+  "uid": "aiox-overview"
+}

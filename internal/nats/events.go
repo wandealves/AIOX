@@ -14,6 +14,7 @@ const (
 	StreamMessages = "AIOX_MESSAGES"
 	StreamTasks    = "AIOX_TASKS"
 	StreamEvents   = "AIOX_EVENTS"
+	StreamDLQ      = "AIOX_DLQ"
 )
 
 // Subject constants.
@@ -24,7 +25,12 @@ const (
 	SubjectTaskPrefix        = "aiox.tasks" // aiox.tasks.{agent_id}
 	SubjectAgentEvent        = "aiox.events.agent"
 	SubjectAuditEvent        = "aiox.events.audit"
+	SubjectDLQTasks          = "aiox.dlq.tasks"
+	SubjectDLQEvents         = "aiox.dlq.events"
 )
+
+// MaxDeliverDefault is the default max delivery attempts before DLQ routing.
+const MaxDeliverDefault = 5
 
 // Channel constants for message routing.
 const (
@@ -55,14 +61,16 @@ type OutboundMessage struct {
 
 // TaskMessage is published for agent task processing via Python workers.
 type TaskMessage struct {
-	RequestID   string    `json:"request_id"`
-	AgentID     uuid.UUID `json:"agent_id"`
-	OwnerUserID uuid.UUID `json:"owner_user_id"`
-	Message     string    `json:"message"`
-	FromJID     string    `json:"from_jid"`
-	AgentJID    string    `json:"agent_jid"`
-	AgentName   string    `json:"agent_name"`
-	Channel     string    `json:"channel,omitempty"`
+	RequestID           string    `json:"request_id"`
+	AgentID             uuid.UUID `json:"agent_id"`
+	OwnerUserID         uuid.UUID `json:"owner_user_id"`
+	Message             string    `json:"message"`
+	FromJID             string    `json:"from_jid"`
+	AgentJID            string    `json:"agent_jid"`
+	AgentName           string    `json:"agent_name"`
+	Channel             string    `json:"channel,omitempty"`
+	PipelineExecutionID string    `json:"pipeline_execution_id,omitempty"`
+	PipelineStepIndex   int       `json:"pipeline_step_index,omitempty"`
 }
 
 // AgentEvent is published for agent lifecycle events.

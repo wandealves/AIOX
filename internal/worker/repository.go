@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -17,6 +18,7 @@ type Execution struct {
 	Input           string
 	Output          string
 	TokensUsed      int
+	ToolsCalled     json.RawMessage
 	WorkerID        string
 	DurationMs      int
 	GoLatencyMs     int
@@ -38,13 +40,18 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 
 // RecordExecution inserts an execution record into the database.
 func (r *Repository) RecordExecution(ctx context.Context, exec *Execution) error {
+	toolsCalled := exec.ToolsCalled
+	if len(toolsCalled) == 0 {
+		toolsCalled = json.RawMessage(`[]`)
+	}
+
 	query := `
-		INSERT INTO executions (id, owner_user_id, agent_id, input, output, tokens_used, worker_id, duration_ms, go_latency_ms, python_latency_ms, status, error_message, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
+		INSERT INTO executions (id, owner_user_id, agent_id, input, output, tokens_used, tools_called, worker_id, duration_ms, go_latency_ms, python_latency_ms, status, error_message, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`
 
 	_, err := r.pool.Exec(ctx, query,
 		exec.ID, exec.OwnerUserID, exec.AgentID,
-		exec.Input, exec.Output, exec.TokensUsed,
+		exec.Input, exec.Output, exec.TokensUsed, toolsCalled,
 		exec.WorkerID, exec.DurationMs, exec.GoLatencyMs, exec.PythonLatencyMs,
 		exec.Status, exec.ErrorMessage, exec.CreatedAt,
 	)

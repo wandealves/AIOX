@@ -41,6 +41,13 @@ type HandlerSet struct {
 	ListAuditLogs      http.HandlerFunc
 	ListAgentAuditLogs http.HandlerFunc
 
+	// Tool handlers (Phase 11)
+	CreateTool http.HandlerFunc
+	ListTools  http.HandlerFunc
+	GetTool    http.HandlerFunc
+	UpdateTool http.HandlerFunc
+	DeleteTool http.HandlerFunc
+
 	// Chat handlers (Phase 7)
 	SendMessage       http.HandlerFunc
 	ListConversations http.HandlerFunc
@@ -66,6 +73,30 @@ type HandlerSet struct {
 	OrgMemberMiddleware func(http.Handler) http.Handler
 	OrgAdminMiddleware  func(http.Handler) http.Handler
 	OrgOwnerMiddleware  func(http.Handler) http.Handler
+
+	// Pipeline handlers (Phase 11B)
+	CreatePipeline  http.HandlerFunc
+	ListPipelines   http.HandlerFunc
+	GetPipeline     http.HandlerFunc
+	UpdatePipeline  http.HandlerFunc
+	DeletePipeline  http.HandlerFunc
+	ExecutePipeline http.HandlerFunc
+	ListExecutions  http.HandlerFunc
+	GetExecution    http.HandlerFunc
+
+	// Scheduler handlers (Phase 11C)
+	CreateSchedule http.HandlerFunc
+	ListSchedules  http.HandlerFunc
+	GetSchedule    http.HandlerFunc
+	UpdateSchedule http.HandlerFunc
+	DeleteSchedule http.HandlerFunc
+
+	// Attachment handlers (Phase 11D)
+	UploadAttachment   http.HandlerFunc
+	ListAttachments    http.HandlerFunc
+	GetAttachment      http.HandlerFunc
+	DownloadAttachment http.HandlerFunc
+	DeleteAttachment   http.HandlerFunc
 
 	// Auth middleware
 	AuthMiddleware func(http.Handler) http.Handler
@@ -185,6 +216,17 @@ func NewRouter(pool *pgxpool.Pool, natsClient *inats.Client, cfg RouterConfig, h
 						r.Get("/conversations", h.ListConversations)
 					}
 
+					// Tool routes (Phase 11)
+					if h.CreateTool != nil {
+						r.Route("/tools", func(r chi.Router) {
+							r.Post("/", h.CreateTool)
+							r.Get("/", h.ListTools)
+							r.Get("/{toolID}", h.GetTool)
+							r.Put("/{toolID}", h.UpdateTool)
+							r.Delete("/{toolID}", h.DeleteTool)
+						})
+					}
+
 					// Memory routes (Phase 4)
 					r.Route("/memories", func(r chi.Router) {
 						r.Get("/", h.ListMemories)
@@ -204,6 +246,51 @@ func NewRouter(pool *pgxpool.Pool, natsClient *inats.Client, cfg RouterConfig, h
 				r.Get("/quota", h.GetUserQuota)
 				r.Get("/audit", h.ListAuditLogs)
 			})
+
+			// Pipeline routes (Phase 11B)
+			if h.CreatePipeline != nil {
+				r.Route("/pipelines", func(r chi.Router) {
+					r.Post("/", h.CreatePipeline)
+					r.Get("/", h.ListPipelines)
+
+					r.Route("/{pipelineID}", func(r chi.Router) {
+						r.Get("/", h.GetPipeline)
+						r.Put("/", h.UpdatePipeline)
+						r.Delete("/", h.DeletePipeline)
+						r.Post("/execute", h.ExecutePipeline)
+						r.Get("/executions", h.ListExecutions)
+						r.Get("/executions/{executionID}", h.GetExecution)
+					})
+				})
+			}
+
+			// Attachment routes (Phase 11D)
+			if h.UploadAttachment != nil {
+				r.Route("/attachments", func(r chi.Router) {
+					r.Post("/", h.UploadAttachment)
+					r.Get("/", h.ListAttachments)
+
+					r.Route("/{attachmentID}", func(r chi.Router) {
+						r.Get("/", h.GetAttachment)
+						r.Get("/download", h.DownloadAttachment)
+						r.Delete("/", h.DeleteAttachment)
+					})
+				})
+			}
+
+			// Scheduler routes (Phase 11C)
+			if h.CreateSchedule != nil {
+				r.Route("/schedules", func(r chi.Router) {
+					r.Post("/", h.CreateSchedule)
+					r.Get("/", h.ListSchedules)
+
+					r.Route("/{scheduleID}", func(r chi.Router) {
+						r.Get("/", h.GetSchedule)
+						r.Put("/", h.UpdateSchedule)
+						r.Delete("/", h.DeleteSchedule)
+					})
+				})
+			}
 
 			// Organization routes (Phase 9)
 			if h.CreateOrg != nil {

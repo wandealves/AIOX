@@ -62,6 +62,28 @@ var (
 			Help: "Total number of messages sent to WebSocket clients.",
 		},
 	)
+
+	DLQMessagesTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "aiox_dlq_messages_total",
+			Help: "Total number of messages sent to the dead-letter queue.",
+		},
+		[]string{"source"},
+	)
+
+	CircuitBreakerState = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "aiox_circuit_breaker_state",
+			Help: "Circuit breaker state: 0=closed, 1=open, 2=half-open.",
+		},
+	)
+
+	CircuitBreakerTripsTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "aiox_circuit_breaker_trips_total",
+			Help: "Total number of times the circuit breaker tripped to open.",
+		},
+	)
 )
 
 func init() {
@@ -74,5 +96,8 @@ func init() {
 		WSConnectionsActive,
 		WSMessagesReceivedTotal,
 		WSMessagesSentTotal,
+		DLQMessagesTotal,
+		CircuitBreakerState,
+		CircuitBreakerTripsTotal,
 	)
 }

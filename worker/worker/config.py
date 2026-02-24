@@ -18,6 +18,10 @@ class Config:
         self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", "")
         self.ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
+        # Tracing
+        self.tracing_enabled = os.getenv("TRACING_ENABLED", "").lower() in ("true", "1")
+        self.tracing_otlp_endpoint = os.getenv("TRACING_OTLP_ENDPOINT", "localhost:4317")
+
     @property
     def grpc_target(self) -> str:
         return f"{self.grpc_host}:{self.grpc_port}"

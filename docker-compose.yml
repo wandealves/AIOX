@@ -66,6 +66,49 @@ services:
       retries: 5
     restart: unless-stopped
 
+  jaeger:
+    image: jaegertracing/all-in-one:1.64.0
+    container_name: aiox-jaeger
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: aiox-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      aiox-api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.2.2
+    container_name: aiox-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - jaeger
+    restart: unless-stopped
+
   aiox-api:
     build:
       context: .
@@ -80,6 +123,8 @@ services:
       XMPP_COMPONENT_HOST: ejabberd
       DB_AUTO_MIGRATE: "true"
       DB_MIGRATIONS_PATH: /app/migrations
+      TRACING_ENABLED: "true"
+      TRACING_OTLP_ENDPOINT: jaeger:4317
     ports:
       - "8080:8080"
       - "50051:50051"
@@ -118,6 +163,8 @@ services:
       MAX_CONCURRENT: 4
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      TRACING_ENABLED: "true"
+      TRACING_OTLP_ENDPOINT: jaeger:4317
     depends_on:
       aiox-api:
         condition: service_healthy
@@ -148,3 +195,5 @@ volumes:
   redis_data:
   nats_data:
   ejabberd_data:
+  prometheus_data:
+  grafana_data:

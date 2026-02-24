@@ -72,6 +72,12 @@ func (c *Client) ensureStreams(ctx context.Context) error {
 			Retention: jetstream.LimitsPolicy,
 			MaxAge:    7 * 24 * time.Hour,
 		},
+		{
+			Name:      StreamDLQ,
+			Subjects:  []string{"aiox.dlq.>"},
+			Retention: jetstream.LimitsPolicy,
+			MaxAge:    30 * 24 * time.Hour,
+		},
 	}
 
 	for _, cfg := range streams {

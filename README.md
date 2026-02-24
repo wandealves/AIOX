@@ -2,6 +2,8 @@
 
 AIOX is a production-ready multi-agent AI platform built in Go. Users interact with AI agents over **XMPP**, **REST API**, or a **real-time WebSocket chat**; agents run in isolated **Python workers** connected via **gRPC**, with **NATS JetStream** as the async message bus, **PostgreSQL** for persistence and vector memory, and **Redis** for caching and rate limiting. A **Next.js dashboard** provides a web UI for agent management, conversations, and governance monitoring.
 
+Agents support **tool/function calling** (HTTP API invocation), **pipeline chaining** (sequential multi-agent workflows), **cron scheduling**, and **multimodal file attachments**. The platform includes **OpenTelemetry distributed tracing** (Jaeger), **Prometheus metrics** with **Grafana dashboards**, a **dead-letter queue** for failed messages, and a **circuit breaker** on worker connections.
+
 ---
 
 ## Table of Contents
@@ -17,6 +19,11 @@ AIOX is a production-ready multi-agent AI platform built in Go. Users interact w
 - [REST API Reference](#rest-api-reference)
 - [WebSocket Chat](#websocket-chat)
 - [Organizations (Multi-Tenancy)](#organizations-multi-tenancy)
+- [Agent Tools (Function Calling)](#agent-tools-function-calling)
+- [Pipelines (Agent Chaining)](#pipelines-agent-chaining)
+- [Scheduled Tasks](#scheduled-tasks)
+- [File Attachments](#file-attachments)
+- [Observability & Monitoring](#observability--monitoring)
 - [Using XMPP to Chat with Agents](#using-xmpp-to-chat-with-agents)
 - [Python Worker](#python-worker)
 - [Make Targets](#make-targets)
@@ -29,27 +36,35 @@ AIOX is a production-ready multi-agent AI platform built in Go. Users interact w
 ## Architecture
 
 ```
-                  ┌─────────────────────────────────────────────────────┐
-                  │                    NATS JetStream                   │
-                  │  inbound ──► Orchestrator ──► tasks ──► Dispatcher  │
-                  │              (validate·route·quota)   (agent+memory)│
-                  └──────┬─────────────────────────────────────┬────────┘
-                         │                                     │
-                         ▲                                     ▼
-                         │                              gRPC ──► Python Worker
-                         │                              (OpenAI · Anthropic · Ollama)
-                         │                                     │
-                         │                              NATS (outbound)
-                         │                                ┌────┴────┐
-User ──XMPP──► ejabberd ──► XMPP Component               │         │
-                                  ▲                       │         │
-                                  └── XMPP Relay ◄────────┘         │
-                                                                    │
-Browser ──► Next.js Dashboard ──► REST API                          │
-                   │                  │                              │
-                   │             POST /messages ──► NATS (inbound)   │
-                   │                                                │
-                   └──── WebSocket ◄──── WS Relay ◄─────────────────┘
+                  ┌──────────────────────────────────────────────────────────┐
+                  │                      NATS JetStream                      │
+                  │  inbound ──► Orchestrator ──► tasks ──► Dispatcher       │
+                  │              (validate·route·quota)   (agent+memory+tools│
+                  │                                        +circuit breaker) │
+                  └──────┬──────────────────────────────────────┬────────────┘
+                         │                                      │
+                         ▲                                      ▼
+                         │                        gRPC ──► Python Worker ──► Tool HTTP calls
+                         │                        (OpenAI · Anthropic · Ollama)
+                         │                                      │
+                         │                       ┌──────────────┤
+                         │                 Pipeline?       NATS (outbound)
+                         │                  Next step        ┌────┴────┐
+Scheduler (cron) ────────┤                  via NATS         │         │
+                         │                                   │         │
+User ──XMPP──► ejabberd ──► XMPP Component                  │         │
+                                  ▲                          │         │
+                                  └── XMPP Relay ◄───────────┘         │
+                                                                       │
+Browser ──► Next.js Dashboard ──► REST API                             │
+                   │                  │                                 │
+                   │             POST /messages ──► NATS (inbound)      │
+                   │             POST /attachments (multipart upload)   │
+                   │                                                   │
+                   └──── WebSocket ◄──── WS Relay ◄────────────────────┘
+
+                         Failed messages (>5 retries) ──► DLQ Stream
+                         All requests ──► Jaeger (traces) + Prometheus (metrics) + Grafana
 ```
 
 ### Stack
@@ -59,12 +74,14 @@ Browser ──► Next.js Dashboard ──► REST API                          
 | Frontend              | Next.js 14 + TypeScript + Tailwind |
 | HTTP API              | Go + chi                        |
 | Real-time             | WebSocket (nhooyr.io/websocket) |
-| Async messaging       | NATS JetStream                  |
+| Async messaging       | NATS JetStream (4 streams + DLQ)|
 | XMPP server           | ejabberd                        |
 | AI workers            | Python 3.12 + gRPC              |
 | Database              | PostgreSQL 16 + pgvector        |
 | Cache / Rate limiting | Redis 7                         |
-| Metrics               | Prometheus                      |
+| Tracing               | OpenTelemetry + Jaeger          |
+| Metrics               | Prometheus + Grafana            |
+| Scheduling            | robfig/cron (Go)                |
 
 ---
 
@@ -149,6 +166,9 @@ Services started:
 | aiox-api       | 8080, 50051      | REST API + gRPC + WebSocket         |
 | aiox-worker    | —                | Python AI worker                    |
 | aiox-frontend  | 3000             | Next.js dashboard                   |
+| Jaeger         | 16686, 4317      | Trace collector + UI                |
+| Prometheus     | 9090             | Metrics scraper + alerting          |
+| Grafana        | 3001             | Dashboards + visualization          |
 
 ### 5. Verify all services are healthy
 
@@ -272,6 +292,9 @@ docker exec -it aiox-ejabberd ejabberdctl unregister <username> aiox.local
 
 ```bash
 docker compose up -d postgres redis nats ejabberd
+
+# Optional: include monitoring stack
+docker compose up -d postgres redis nats ejabberd jaeger prometheus grafana
 ```
 
 ### 2. Copy and edit config
@@ -397,6 +420,23 @@ openssl rand -hex 32
 | `GOVERNANCE_MAX_TOKENS_PER_DAY`    | `100000` | Token quota per user per day         |
 | `GOVERNANCE_MAX_TOKENS_PER_MINUTE` | `10000`  | Token rate limit per user per minute |
 | `GOVERNANCE_MAX_REQUESTS_PER_DAY`  | `1000`   | Request quota per user per day       |
+
+### Tracing (OpenTelemetry)
+
+| Env var                  | Default          | Description                            |
+| ------------------------ | ---------------- | -------------------------------------- |
+| `TRACING_ENABLED`        | `false`          | Enable distributed tracing             |
+| `TRACING_OTLP_ENDPOINT`  | `localhost:4317` | OTLP gRPC collector (e.g. Jaeger)      |
+| `TRACING_SERVICE_NAME`   | `aiox-api`       | Service name in traces                 |
+| `TRACING_SAMPLE_RATE`    | `1.0`            | Sampling rate (0.0–1.0)               |
+
+### Storage (Attachments)
+
+| Env var               | Default              | Description                      |
+| --------------------- | -------------------- | -------------------------------- |
+| `STORAGE_BACKEND`     | `local`              | Storage backend (`local`)        |
+| `STORAGE_LOCAL_PATH`  | `./data/attachments` | Local filesystem path            |
+| `STORAGE_MAX_SIZE_MB` | `10`                 | Max upload size in MB            |
 
 ### Logging
 
@@ -807,6 +847,255 @@ POST /api/v1/orgs/{orgID}/agents            # Editor+
 
 ---
 
+---
+
+### Agent Tools (Function Calling)
+
+Agents can invoke external HTTP APIs as tools during LLM execution. The LLM decides when to call tools based on the conversation context, and the Python worker executes the HTTP calls.
+
+#### Create Tool
+
+```http
+POST /api/v1/agents/{agentID}/tools
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{
+  "name": "get_weather",
+  "description": "Get current weather for a city",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "city": { "type": "string", "description": "City name" }
+    },
+    "required": ["city"]
+  },
+  "endpoint_url": "https://api.weather.com/v1/current",
+  "http_method": "GET",
+  "auth_type": "api_key",
+  "auth_config": { "header": "X-API-Key", "value": "your-key" },
+  "timeout_sec": 10
+}
+```
+
+#### List / Get / Update / Delete Tools
+
+```http
+GET    /api/v1/agents/{agentID}/tools              # List all tools
+GET    /api/v1/agents/{agentID}/tools/{toolID}      # Get tool details
+PUT    /api/v1/agents/{agentID}/tools/{toolID}      # Update tool
+DELETE /api/v1/agents/{agentID}/tools/{toolID}      # Delete tool
+```
+
+Auth types: `""` (none), `"bearer"`, `"api_key"`. Auth config is encrypted at rest with AES-256-GCM.
+
+The LLM tool-calling loop runs up to 10 iterations per request. Both OpenAI (`tool_calls` / `function`) and Anthropic (`tool_use`) formats are supported natively.
+
+---
+
+### Pipelines (Agent Chaining)
+
+Pipelines execute a sequence of agents where each step's output feeds as input to the next. Go `text/template` transforms can modify the output between steps.
+
+#### Create Pipeline
+
+```http
+POST /api/v1/pipelines
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{
+  "name": "Research & Summarize",
+  "description": "Research a topic then summarize the findings",
+  "steps": [
+    {
+      "agent_id": "research-agent-uuid",
+      "timeout_sec": 120
+    },
+    {
+      "agent_id": "summarizer-agent-uuid",
+      "transform": "Summarize the following research:\n\n{{.Input}}",
+      "timeout_sec": 60
+    }
+  ]
+}
+```
+
+#### Execute Pipeline
+
+```http
+POST /api/v1/pipelines/{pipelineID}/execute
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{
+  "input": "What are the latest advances in quantum computing?"
+}
+```
+
+Response `202`:
+
+```json
+{
+  "id": "execution-uuid",
+  "pipeline_id": "pipeline-uuid",
+  "status": "running",
+  "current_step": 0,
+  "total_steps": 2
+}
+```
+
+#### Other Pipeline Endpoints
+
+```http
+GET    /api/v1/pipelines                                          # List pipelines
+GET    /api/v1/pipelines/{pipelineID}                              # Get pipeline
+PUT    /api/v1/pipelines/{pipelineID}                              # Update pipeline
+DELETE /api/v1/pipelines/{pipelineID}                              # Delete pipeline
+GET    /api/v1/pipelines/{pipelineID}/executions                   # List executions
+GET    /api/v1/pipelines/{pipelineID}/executions/{executionID}     # Get execution details
+```
+
+---
+
+### Scheduled Tasks
+
+Cron-based execution of agents or pipelines on a recurring schedule.
+
+#### Create Scheduled Task
+
+```http
+POST /api/v1/schedules
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{
+  "name": "Daily Report",
+  "agent_id": "agent-uuid",
+  "cron_expression": "0 9 * * *",
+  "input_template": "Generate the daily report for today",
+  "timezone": "America/Sao_Paulo"
+}
+```
+
+Standard 5-field cron expressions (`minute hour day-of-month month day-of-week`). The scheduler polls every 60 seconds for due tasks.
+
+#### Other Schedule Endpoints
+
+```http
+GET    /api/v1/schedules                    # List schedules
+GET    /api/v1/schedules/{scheduleID}        # Get schedule
+PUT    /api/v1/schedules/{scheduleID}        # Update schedule
+DELETE /api/v1/schedules/{scheduleID}        # Delete schedule
+```
+
+---
+
+### File Attachments
+
+Upload files to send as multimodal input to agents. Supports images (JPEG, PNG, GIF, WebP), documents (PDF, plain text, CSV), and JSON.
+
+#### Upload File
+
+```http
+POST /api/v1/attachments
+Authorization: Bearer <access_token>
+Content-Type: multipart/form-data
+
+file=@photo.png
+```
+
+Response `201`:
+
+```json
+{
+  "id": "attachment-uuid",
+  "filename": "photo.png",
+  "content_type": "image/png",
+  "size_bytes": 45230,
+  "checksum": "sha256:abc123..."
+}
+```
+
+#### Other Attachment Endpoints
+
+```http
+GET    /api/v1/attachments                              # List uploads
+GET    /api/v1/attachments/{attachmentID}                # Get metadata
+GET    /api/v1/attachments/{attachmentID}/download       # Download file
+DELETE /api/v1/attachments/{attachmentID}                # Delete file
+```
+
+**Max upload size:** 10 MB (configurable via `STORAGE_MAX_SIZE_MB`).
+
+Images are sent to LLM providers as base64-encoded multimodal content (OpenAI `image_url`, Anthropic `image` with `base64` source). Text files are inlined as text content parts.
+
+---
+
+### Observability & Monitoring
+
+AIOX includes a full observability stack for production monitoring.
+
+#### Distributed Tracing (OpenTelemetry)
+
+When `TRACING_ENABLED=true`, the platform emits traces via OTLP gRPC to Jaeger (or any OTLP-compatible collector). Traces span the full request lifecycle:
+
+```
+HTTP Request → Orchestrator → NATS → Dispatcher → gRPC → Python Worker → Tool calls
+```
+
+- W3C TraceContext propagated through NATS message headers
+- `X-Trace-ID` response header on all HTTP requests
+- `trace_id` and `span_id` in structured logs
+
+Access the Jaeger UI at `http://localhost:16686`.
+
+#### Prometheus Metrics
+
+Available at `GET /metrics`. Key metrics:
+
+| Metric | Type | Description |
+| ------ | ---- | ----------- |
+| `aiox_http_requests_total` | Counter | HTTP requests by method, path, status |
+| `aiox_http_request_duration_seconds` | Histogram | Request latency |
+| `aiox_tasks_dispatched_total` | Counter | Tasks sent to workers |
+| `aiox_tasks_completed_total` | Counter | Tasks completed |
+| `aiox_worker_pool_connected` | Gauge | Connected workers |
+| `aiox_circuit_breaker_state` | Gauge | 0=closed, 1=open, 2=half-open |
+| `aiox_circuit_breaker_trips_total` | Counter | Circuit breaker trips |
+| `aiox_dlq_messages_total` | Counter | Dead-letter queue messages |
+
+#### Grafana Dashboards
+
+Pre-provisioned at `http://localhost:3001` with:
+- HTTP request rates and latency
+- Task throughput and worker pool status
+- Circuit breaker state
+- DLQ message accumulation
+
+#### Alert Rules (Prometheus)
+
+| Alert | Condition |
+| ----- | --------- |
+| `NoWorkersConnected` | `aiox_worker_pool_connected == 0` for 2 min |
+| `HighErrorRate` | 5xx rate > 10% for 5 min |
+| `CircuitBreakerOpen` | Circuit breaker open for 1 min |
+| `DLQMessagesAccumulating` | > 10 DLQ messages/hour |
+
+#### Dead-Letter Queue
+
+Failed NATS messages (after 5 delivery attempts) are routed to the `AIOX_DLQ` stream with failure metadata. DLQ subjects: `aiox.dlq.tasks`, `aiox.dlq.messages`, `aiox.dlq.events`. Messages retained for 30 days.
+
+#### Circuit Breaker
+
+The gRPC dispatcher uses a circuit breaker to protect against worker failures:
+
+- **Closed** (normal): requests pass through
+- **Open** (after 5 consecutive failures): requests rejected, tasks Nak'd back to NATS
+- **Half-Open** (after 30s timeout): one probe request allowed; success → Closed, failure → Open
+
+---
+
 ### LLM Providers and Models
 
 | Provider       | `provider` value | Example models                                   |
@@ -845,7 +1134,7 @@ agent-uuid@agents.aiox.local
 
 ## Python Worker
 
-The Python worker connects to the Go API via gRPC and processes LLM tasks.
+The Python worker connects to the Go API via gRPC and processes LLM tasks. It supports tool/function calling (HTTP API execution), multimodal attachments (images + documents), and OpenTelemetry tracing.
 
 ### Environment Variables
 
@@ -859,6 +1148,8 @@ The Python worker connects to the Go API via gRPC and processes LLM tasks.
 | `OPENAI_API_KEY`      | —                        | Enables OpenAI provider                        |
 | `ANTHROPIC_API_KEY`   | —                        | Enables Anthropic provider                     |
 | `OLLAMA_BASE_URL`     | `http://localhost:11434` | Ollama endpoint (always enabled)               |
+| `TRACING_ENABLED`     | `false`                  | Enable OpenTelemetry tracing                   |
+| `TRACING_OTLP_ENDPOINT` | `localhost:4317`      | OTLP gRPC collector endpoint                   |
 
 ### Running multiple workers
 
@@ -953,13 +1244,18 @@ aiox/
 │   ├── chat/                    # REST chat (send message, list conversations)
 │   ├── ws/                      # WebSocket hub, conn, handler, relay
 │   ├── orgs/                    # Organizations (multi-tenancy)
+│   ├── tools/                   # Agent tool definitions (function calling)
+│   ├── pipelines/               # Agent chaining (sequential execution)
+│   ├── scheduler/               # Cron-based task scheduling + runner
+│   ├── attachments/             # File upload, storage, multimodal input
+│   ├── tracing/                 # OpenTelemetry tracing + NATS propagation
 │   ├── config/                  # Koanf config + validation
 │   ├── database/                # pgxpool + auto-migration
 │   ├── redis/                   # Redis client
-│   ├── nats/                    # JetStream client, publisher, consumer
+│   ├── nats/                    # JetStream client, publisher, consumer, DLQ
 │   ├── xmpp/                    # XMPP component, handler, outbound relay
 │   ├── orchestrator/            # Event loop, router, validator
-│   ├── worker/                  # gRPC server, pool, dispatcher, auth
+│   ├── worker/                  # gRPC server, pool, dispatcher, circuit breaker
 │   ├── memory/                  # Short-term (Redis) + long-term (pgvector)
 │   ├── governance/              # Quota, rate limiting, audit logs
 │   ├── middleware/              # Logging, CORS, security headers, metrics
@@ -980,22 +1276,29 @@ aiox/
 │   └── worker/
 │       ├── main.py              # Entry point
 │       ├── config.py            # Env var config
-│       ├── client.py            # gRPC client loop
+│       ├── client.py            # gRPC client loop (tools + attachments)
+│       ├── tools.py             # HTTP tool executor (aiohttp)
 │       ├── embedding.py         # sentence-transformers
 │       ├── memory.py            # Memory context builder
 │       └── llm/                 # OpenAI, Anthropic, Ollama providers
 ├── proto/worker/v1/worker.proto # gRPC service definition
-├── migrations/                  # 16 SQL migrations (golang-migrate)
+├── migrations/                  # 20 SQL migrations (golang-migrate)
 ├── tests/integration/           # Integration test suite
 ├── docker/
 │   ├── ejabberd/
 │   │   ├── ejabberd.yml         # XMPP server config
 │   │   ├── gen-cert.sh          # Generate self-signed TLS cert
 │   │   └── install-ca.sh        # Install CA in Ubuntu trust store
+│   ├── prometheus/
+│   │   ├── prometheus.yml       # Scrape config (aiox-api target)
+│   │   └── alerts.yml           # Alert rules
+│   ├── grafana/
+│   │   ├── provisioning/        # Datasources (Prometheus + Jaeger)
+│   │   └── dashboards/          # AIOX overview dashboard
 │   └── postgres/init.sql        # DB initialization
 ├── .github/workflows/ci.yml     # GitHub Actions: test + lint + build
 ├── Dockerfile                   # Multi-stage Go API image
-├── docker-compose.yml           # Full stack (API + frontend + infra)
+├── docker-compose.yml           # Full stack (API + frontend + monitoring)
 ├── Makefile
 └── .env.example                 # Configuration template
 ```
@@ -1052,6 +1355,33 @@ Check orchestrator and dispatcher logs:
 ```bash
 docker compose logs aiox-api | grep -E "orchestrator|dispatcher|error"
 ```
+
+### No traces in Jaeger
+
+- Ensure `TRACING_ENABLED=true` in your `.env`
+- Verify Jaeger is running: `docker compose ps jaeger`
+- Check OTLP endpoint: `TRACING_OTLP_ENDPOINT=jaeger:4317` (Docker) or `localhost:4317` (local dev)
+
+### Circuit breaker is open (tasks being rejected)
+
+The circuit breaker opens after 5 consecutive gRPC failures. Check worker connectivity:
+
+```bash
+docker compose logs aiox-worker --tail=50
+curl http://localhost:8080/metrics | grep circuit_breaker
+```
+
+It will auto-recover after 30 seconds (half-open state) if a probe request succeeds.
+
+### Messages stuck in DLQ
+
+Inspect DLQ messages via NATS monitor:
+
+```
+http://localhost:8222/jsz?streams=true&consumers=true
+```
+
+DLQ messages include the original subject, failure reason, and attempt count.
 
 ### go vet warning in internal/xmpp/component.go
 

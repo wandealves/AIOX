@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+
+	"github.com/aiox-platform/aiox/internal/tracing"
 )
 
 // Publisher provides typed methods for publishing events to NATS JetStream.
@@ -54,7 +57,14 @@ func (p *Publisher) publish(ctx context.Context, subject string, data any) error
 	if err != nil {
 		return fmt.Errorf("marshaling event for %s: %w", subject, err)
 	}
-	_, err = p.js.Publish(ctx, subject, payload)
+
+	msg := &nats.Msg{
+		Subject: subject,
+		Data:    payload,
+	}
+	tracing.InjectContext(ctx, msg)
+
+	_, err = p.js.PublishMsg(ctx, msg)
 	if err != nil {
 		return fmt.Errorf("publishing to %s: %w", subject, err)
 	}

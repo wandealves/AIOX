@@ -15,13 +15,15 @@ import (
 type Consumer struct {
 	repo        *Repository
 	consumerMgr *inats.ConsumerManager
+	dlqPub      *inats.DLQPublisher
 }
 
 // NewConsumer creates a new audit event Consumer.
-func NewConsumer(repo *Repository, consumerMgr *inats.ConsumerManager) *Consumer {
+func NewConsumer(repo *Repository, consumerMgr *inats.ConsumerManager, dlqPub *inats.DLQPublisher) *Consumer {
 	return &Consumer{
 		repo:        repo,
 		consumerMgr: consumerMgr,
+		dlqPub:      dlqPub,
 	}
 }
 
@@ -55,6 +57,13 @@ func (c *Consumer) Start(ctx context.Context) error {
 }
 
 func (c *Consumer) handleEvent(ctx context.Context, msg jetstream.Msg) {
+	// Check DLQ threshold
+	if shouldDLQ, attempts := inats.ShouldDLQ(msg, inats.MaxDeliverDefault); shouldDLQ && c.dlqPub != nil {
+		c.dlqPub.PublishToDLQ(ctx, inats.SubjectDLQEvents, msg.Data(), "max delivery attempts exceeded", attempts)
+		_ = msg.Ack()
+		return
+	}
+
 	var event inats.AuditEvent
 	if err := json.Unmarshal(msg.Data(), &event); err != nil {
 		slog.Error("audit consumer: unmarshaling event", "error", err)

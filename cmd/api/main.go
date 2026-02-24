@@ -9,9 +9,11 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 
 	"github.com/aiox-platform/aiox/internal/agents"
+	"github.com/aiox-platform/aiox/internal/attachments"
 	"github.com/aiox-platform/aiox/internal/api"
 	"github.com/aiox-platform/aiox/internal/auth"
 	"github.com/aiox-platform/aiox/internal/chat"
@@ -25,8 +27,12 @@ import (
 	inats "github.com/aiox-platform/aiox/internal/nats"
 	"github.com/aiox-platform/aiox/internal/orchestrator"
 	"github.com/aiox-platform/aiox/internal/orgs"
+	"github.com/aiox-platform/aiox/internal/pipelines"
+	"github.com/aiox-platform/aiox/internal/scheduler"
 	iredis "github.com/aiox-platform/aiox/internal/redis"
 	"github.com/aiox-platform/aiox/internal/server"
+	"github.com/aiox-platform/aiox/internal/tools"
+	"github.com/aiox-platform/aiox/internal/tracing"
 	"github.com/aiox-platform/aiox/internal/users"
 	"github.com/aiox-platform/aiox/internal/worker"
 	pb "github.com/aiox-platform/aiox/internal/worker/workerpb"
@@ -50,6 +56,19 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Initialize tracing
+	tp, err := tracing.Init(ctx, tracing.TracingConfig{
+		Enabled:      cfg.Tracing.Enabled,
+		OTLPEndpoint: cfg.Tracing.OTLPEndpoint,
+		ServiceName:  cfg.Tracing.ServiceName,
+		SampleRate:   cfg.Tracing.SampleRate,
+	})
+	if err != nil {
+		slog.Error("initializing tracing", "error", err)
+		os.Exit(1)
+	}
+	defer tracing.Shutdown(ctx, tp)
 
 	// Auto-migrate if enabled
 	if cfg.DB.AutoMigrate {
@@ -111,12 +130,13 @@ func main() {
 	auditRepo := audit.NewRepository(pool)
 	govHandler := governance.NewHandler(quotaSvc, auditRepo)
 
-	// NATS publisher and consumer manager
+	// NATS publisher, consumer manager, and DLQ publisher
 	publisher := inats.NewPublisher(natsClient.JetStream())
 	consumerMgr := inats.NewConsumerManager(natsClient.JetStream())
+	dlqPub := inats.NewDLQPublisher(natsClient.JetStream())
 
 	// Audit consumer: NATS → audit_logs table
-	auditConsumer := audit.NewConsumer(auditRepo, consumerMgr)
+	auditConsumer := audit.NewConsumer(auditRepo, consumerMgr, dlqPub)
 
 	// Orchestrator
 	validator := orchestrator.NewValidator()
@@ -140,21 +160,50 @@ func main() {
 	grpcWorkerServer := worker.NewServer(workerPool, workerRepo)
 
 	var grpcServerOpts []grpc.ServerOption
+	grpcServerOpts = append(grpcServerOpts,
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+	)
 	if cfg.GRPC.WorkerAPIKey != "" {
 		grpcServerOpts = append(grpcServerOpts,
-			grpc.UnaryInterceptor(worker.UnaryAuthInterceptor(cfg.GRPC.WorkerAPIKey)),
-			grpc.StreamInterceptor(worker.StreamAuthInterceptor(cfg.GRPC.WorkerAPIKey)),
+			grpc.ChainUnaryInterceptor(worker.UnaryAuthInterceptor(cfg.GRPC.WorkerAPIKey)),
+			grpc.ChainStreamInterceptor(worker.StreamAuthInterceptor(cfg.GRPC.WorkerAPIKey)),
 		)
 	}
 	grpcSrv := grpc.NewServer(grpcServerOpts...)
 	pb.RegisterWorkerServiceServer(grpcSrv, grpcWorkerServer)
 
+	// Tools (Phase 11)
+	toolsRepo := tools.NewRepository(pool)
+	toolsSvc := tools.NewService(toolsRepo, cfg.Encryption.Key)
+	toolsHandler := tools.NewHandler(toolsSvc)
+
 	// Task dispatcher: NATS tasks → gRPC workers → outbound messages
 	dispatcher := worker.NewDispatcher(
 		workerPool, publisher, consumerMgr,
-		agentSvc, workerRepo, memorySvc, quotaSvc, grpcWorkerServer.ResultChannel(),
+		agentSvc, workerRepo, memorySvc, quotaSvc, toolsSvc, dlqPub, grpcWorkerServer.ResultChannel(),
 		cfg.GRPC.TaskTimeoutSec,
 	)
+
+	// Pipelines (Phase 11B)
+	pipelinesRepo := pipelines.NewRepository(pool)
+	pipelinesSvc := pipelines.NewService(pipelinesRepo, agentSvc, publisher)
+	pipelinesHandler := pipelines.NewHandler(pipelinesSvc)
+	dispatcher.SetPipelineResultFunc(pipelinesSvc.HandlePipelineResult)
+
+	// Attachments (Phase 11D)
+	attachStorage, err := attachments.NewLocalStorage(cfg.Storage.LocalPath)
+	if err != nil {
+		slog.Error("creating attachment storage", "error", err)
+		os.Exit(1)
+	}
+	attachRepo := attachments.NewRepository(pool)
+	attachHandler := attachments.NewHandler(attachRepo, attachStorage, cfg.Storage.MaxSizeMB)
+
+	// Scheduler (Phase 11C)
+	schedulerRepo := scheduler.NewRepository(pool)
+	schedulerSvc := scheduler.NewService(schedulerRepo)
+	schedulerHandler := scheduler.NewHandler(schedulerSvc)
+	schedulerRunner := scheduler.NewRunner(schedulerRepo, agentSvc, publisher)
 
 	// Organizations (Phase 9)
 	orgsRepo := orgs.NewRepository(pool)
@@ -200,6 +249,12 @@ func main() {
 		ListAuditLogs:      govHandler.ListAuditLogs,
 		ListAgentAuditLogs: govHandler.ListAgentAuditLogs,
 
+		CreateTool: toolsHandler.Create,
+		ListTools:  toolsHandler.List,
+		GetTool:    toolsHandler.Get,
+		UpdateTool: toolsHandler.Update,
+		DeleteTool: toolsHandler.Delete,
+
 		SendMessage:       chatHandler.SendMessage,
 		ListConversations: chatHandler.ListConversations,
 
@@ -222,6 +277,27 @@ func main() {
 		OrgMemberMiddleware: orgs.OrgMemberMiddleware(orgsSvc),
 		OrgAdminMiddleware:  orgs.OrgRoleMiddleware(orgs.RoleAdmin),
 		OrgOwnerMiddleware:  orgs.OrgRoleMiddleware(orgs.RoleOwner),
+
+		UploadAttachment:   attachHandler.Upload,
+		ListAttachments:    attachHandler.List,
+		GetAttachment:      attachHandler.Get,
+		DownloadAttachment: attachHandler.Download,
+		DeleteAttachment:   attachHandler.Delete,
+
+		CreateSchedule: schedulerHandler.Create,
+		ListSchedules:  schedulerHandler.List,
+		GetSchedule:    schedulerHandler.Get,
+		UpdateSchedule: schedulerHandler.Update,
+		DeleteSchedule: schedulerHandler.Delete,
+
+		CreatePipeline:  pipelinesHandler.Create,
+		ListPipelines:   pipelinesHandler.List,
+		GetPipeline:     pipelinesHandler.Get,
+		UpdatePipeline:  pipelinesHandler.Update,
+		DeletePipeline:  pipelinesHandler.Delete,
+		ExecutePipeline: pipelinesHandler.Execute,
+		ListExecutions:  pipelinesHandler.ListExecutions,
+		GetExecution:    pipelinesHandler.GetExecution,
 
 		AuthMiddleware: auth.Middleware(authSvc),
 
@@ -296,6 +372,15 @@ func main() {
 		defer wg.Done()
 		slog.Info("starting WebSocket hub")
 		wsHub.Run(ctx)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		slog.Info("starting scheduler runner")
+		if err := schedulerRunner.Start(ctx); err != nil {
+			slog.Error("scheduler runner error", "error", err)
+		}
 	}()
 
 	wg.Add(1)

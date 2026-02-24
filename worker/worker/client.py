@@ -12,12 +12,34 @@ from .llm.base import LLMProvider, LLMResponse
 from .llm.openai import OpenAIProvider
 from .llm.anthropic import AnthropicProvider
 from .memory import MemoryConfig, MemoryContext
+from .tools import ToolExecutor, proto_tools_to_openai_format, proto_tools_to_anthropic_format
 
 # Import generated protobuf modules
 from . import worker_pb2
 from . import worker_pb2_grpc
 
 logger = logging.getLogger(__name__)
+
+
+def _setup_tracing(config: Config):
+    """Initialize OpenTelemetry tracing if enabled."""
+    if not config.tracing_enabled:
+        return
+    try:
+        from opentelemetry import trace
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk.resources import Resource
+
+        resource = Resource.create({"service.name": f"aiox-worker-{config.worker_id}"})
+        exporter = OTLPSpanExporter(endpoint=config.tracing_otlp_endpoint, insecure=True)
+        provider = TracerProvider(resource=resource)
+        provider.add_span_processor(BatchSpanProcessor(exporter))
+        trace.set_tracer_provider(provider)
+        logger.info("Tracing initialized: endpoint=%s", config.tracing_otlp_endpoint)
+    except ImportError:
+        logger.warning("OpenTelemetry packages not installed, tracing disabled")
 
 
 class WorkerClient:
@@ -29,6 +51,13 @@ class WorkerClient:
         self._setup_providers()
         self.semaphore = asyncio.Semaphore(config.max_concurrent)
         self.embedding_svc = EmbeddingService()
+        _setup_tracing(config)
+        self._tracer = None
+        try:
+            from opentelemetry import trace
+            self._tracer = trace.get_tracer("aiox-worker")
+        except ImportError:
+            pass
 
     def _setup_providers(self):
         if self.config.openai_api_key:
@@ -121,6 +150,19 @@ class WorkerClient:
     async def _process_task(self, stream, task_req):
         """Process a single task with concurrency limiting and memory support."""
         async with self.semaphore:
+            # Start a tracing span if available
+            span = None
+            if self._tracer:
+                from opentelemetry import trace
+                span = self._tracer.start_span(
+                    "worker.process_task",
+                    attributes={
+                        "request_id": task_req.request_id,
+                        "agent_id": task_req.agent_id,
+                        "worker_id": self.config.worker_id,
+                    },
+                )
+
             logger.info(
                 "Processing task %s for agent %s",
                 task_req.request_id,
@@ -138,7 +180,64 @@ class WorkerClient:
                     task_req.system_prompt, task_req.user_message
                 )
 
-            response = await self._call_llm(task_req, messages=messages)
+            # Convert attachments to multimodal content parts
+            attachment_parts = []
+            if task_req.attachments:
+                for att in task_req.attachments:
+                    if att.content_type.startswith("image/"):
+                        import base64
+                        b64 = base64.b64encode(att.content).decode("utf-8")
+                        attachment_parts.append({
+                            "type": "image",
+                            "filename": att.filename,
+                            "content_type": att.content_type,
+                            "data_b64": b64,
+                        })
+                    else:
+                        try:
+                            text_content = att.content.decode("utf-8")
+                        except UnicodeDecodeError:
+                            text_content = f"[Binary file: {att.filename}]"
+                        attachment_parts.append({
+                            "type": "text",
+                            "filename": att.filename,
+                            "content": text_content,
+                        })
+
+            # Convert proto tools to LLM-specific format
+            tools_for_llm = None
+            tool_executor = None
+            if task_req.tools:
+                tool_executor = ToolExecutor()
+                try:
+                    llm_config = json.loads(task_req.llm_config_json) if task_req.llm_config_json else {}
+                except json.JSONDecodeError:
+                    llm_config = {}
+                provider_name = llm_config.get("provider", "openai")
+
+                if provider_name == "anthropic":
+                    tools_for_llm = proto_tools_to_anthropic_format(task_req.tools)
+                else:
+                    tools_for_llm = proto_tools_to_openai_format(task_req.tools)
+
+            response = await self._call_llm(
+                task_req, messages=messages,
+                tools=tools_for_llm, tool_executor=tool_executor,
+                attachments=attachment_parts if attachment_parts else None,
+            )
+
+            # Convert tools_called from LLM response to proto ToolCall messages
+            proto_tools_called = []
+            for tc in response.tools_called:
+                proto_tools_called.append(
+                    worker_pb2.ToolCall(
+                        tool_name=tc.tool_name,
+                        arguments_json=tc.arguments_json,
+                        result_json=tc.result_json,
+                        duration_ms=tc.duration_ms,
+                        error=tc.error,
+                    )
+                )
 
             # Generate embedding for user message if long-term memory is enabled
             new_memories = []
@@ -170,20 +269,36 @@ class WorkerClient:
                     model_used=response.model_used,
                     error_message=response.error,
                     new_memories=new_memories,
+                    tools_called=proto_tools_called,
                 )
             )
             await stream.write(result_msg)
 
+            if span:
+                span.set_attribute("tokens_used", response.tokens_used)
+                span.set_attribute("duration_ms", response.duration_ms)
+                span.set_attribute("model_used", response.model_used)
+                if response.error:
+                    span.set_attribute("error", True)
+                    span.set_attribute("error.message", response.error)
+                span.end()
+
             logger.info(
-                "Task %s completed: %d tokens, %dms, %d new memories",
+                "Task %s completed: %d tokens, %dms, %d new memories, %d tool calls",
                 task_req.request_id,
                 response.tokens_used,
                 response.duration_ms,
                 len(new_memories),
+                len(proto_tools_called),
             )
 
     async def _call_llm(
-        self, task_req, messages: list[dict] | None = None
+        self,
+        task_req,
+        messages: list[dict] | None = None,
+        tools: list[dict] | None = None,
+        tool_executor: ToolExecutor | None = None,
+        attachments: list[dict] | None = None,
     ) -> LLMResponse:
         """Call the appropriate LLM provider based on agent's llm_config."""
         try:
@@ -213,6 +328,9 @@ class WorkerClient:
             temperature=temperature,
             max_tokens=max_tokens,
             messages=messages,
+            tools=tools,
+            tool_executor=tool_executor,
+            attachments=attachments,
         )
 
     async def _heartbeat_loop(self, stub, metadata):

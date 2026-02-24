@@ -4,6 +4,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 type wrappedWriter struct {
@@ -25,13 +27,23 @@ func Logging(next http.Handler) http.Handler {
 
 		duration := time.Since(start)
 
-		slog.Info("request",
+		attrs := []any{
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", wrapped.statusCode,
 			"duration_ms", duration.Milliseconds(),
 			"remote_addr", r.RemoteAddr,
 			"request_id", r.Context().Value(requestIDKey),
-		)
+		}
+
+		span := trace.SpanFromContext(r.Context())
+		if span.SpanContext().IsValid() {
+			attrs = append(attrs,
+				"trace_id", span.SpanContext().TraceID().String(),
+				"span_id", span.SpanContext().SpanID().String(),
+			)
+		}
+
+		slog.Info("request", attrs...)
 	})
 }

@@ -22,7 +22,22 @@ type Config struct {
 	NATS       NATSConfig
 	GRPC       GRPCConfig
 	Governance GovernanceCfg
+	Tracing    TracingConfig
+	Storage    StorageConfig
 	Log        LogConfig
+}
+
+type StorageConfig struct {
+	Backend   string // "local" (default)
+	LocalPath string // directory for local file storage
+	MaxSizeMB int    // max upload size in MB (default 10)
+}
+
+type TracingConfig struct {
+	Enabled      bool
+	OTLPEndpoint string
+	ServiceName  string
+	SampleRate   float64
 }
 
 type GovernanceCfg struct {
@@ -169,10 +184,51 @@ func Load() (*Config, error) {
 			MaxTokensPerMinute: k.Int("governance.max.tokens.per.minute"),
 			MaxRequestsPerDay:  k.Int("governance.max.requests.per.day"),
 		},
+		Tracing: TracingConfig{
+			OTLPEndpoint: k.String("tracing.otlp.endpoint"),
+			ServiceName:  k.String("tracing.service.name"),
+		},
 		Log: LogConfig{
 			Level:  k.String("log.level"),
 			Format: k.String("log.format"),
 		},
+	}
+
+	// Tracing
+	tracingEnabled := k.String("tracing.enabled")
+	cfg.Tracing.Enabled = tracingEnabled == "true" || tracingEnabled == "1"
+	if cfg.Tracing.OTLPEndpoint == "" {
+		cfg.Tracing.OTLPEndpoint = "localhost:4317"
+	}
+	if cfg.Tracing.ServiceName == "" {
+		cfg.Tracing.ServiceName = "aiox-api"
+	}
+	sampleRateStr := k.String("tracing.sample.rate")
+	if sampleRateStr != "" {
+		if rate, parseErr := strconv.ParseFloat(sampleRateStr, 64); parseErr == nil {
+			cfg.Tracing.SampleRate = rate
+		}
+	}
+	if cfg.Tracing.SampleRate <= 0 {
+		cfg.Tracing.SampleRate = 1.0
+	}
+
+	// Storage
+	cfg.Storage.Backend = k.String("storage.backend")
+	cfg.Storage.LocalPath = k.String("storage.local.path")
+	if maxStr := k.String("storage.max.size.mb"); maxStr != "" {
+		if v, parseErr := strconv.Atoi(maxStr); parseErr == nil {
+			cfg.Storage.MaxSizeMB = v
+		}
+	}
+	if cfg.Storage.Backend == "" {
+		cfg.Storage.Backend = "local"
+	}
+	if cfg.Storage.LocalPath == "" {
+		cfg.Storage.LocalPath = "./data/attachments"
+	}
+	if cfg.Storage.MaxSizeMB <= 0 {
+		cfg.Storage.MaxSizeMB = 10
 	}
 
 	// Apply defaults

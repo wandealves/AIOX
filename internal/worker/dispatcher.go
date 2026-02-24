@@ -10,6 +10,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go/jetstream"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 
 	"github.com/aiox-platform/aiox/internal/agents"
 	"github.com/aiox-platform/aiox/internal/governance"
@@ -17,39 +19,55 @@ import (
 	"github.com/aiox-platform/aiox/internal/memory"
 	"github.com/aiox-platform/aiox/internal/metrics"
 	inats "github.com/aiox-platform/aiox/internal/nats"
+	"github.com/aiox-platform/aiox/internal/tools"
+	"github.com/aiox-platform/aiox/internal/tracing"
 	pb "github.com/aiox-platform/aiox/internal/worker/workerpb"
 )
 
 // pendingTask holds metadata for a dispatched task awaiting a response.
 type pendingTask struct {
-	RequestID    string
-	AgentID      uuid.UUID
-	OwnerUserID  uuid.UUID
-	FromJID      string
-	AgentJID     string
-	AgentName    string
-	WorkerID     string
-	Input        string
-	Channel      string
-	DispatchedAt time.Time
-	MemoryConfig memory.MemoryConfig
+	RequestID           string
+	AgentID             uuid.UUID
+	OwnerUserID         uuid.UUID
+	FromJID             string
+	AgentJID            string
+	AgentName           string
+	WorkerID            string
+	Input               string
+	Channel             string
+	DispatchedAt        time.Time
+	MemoryConfig        memory.MemoryConfig
+	PipelineExecutionID string
+	PipelineStepIndex   int
 }
+
+// PipelineResultFunc is called when a pipeline step completes.
+type PipelineResultFunc func(requestID, text string, tokens, durationMs int, errMsg string)
 
 // Dispatcher consumes tasks from NATS, dispatches to Python workers via gRPC,
 // and publishes outbound messages when workers return results.
 type Dispatcher struct {
-	pool        *Pool
-	publisher   *inats.Publisher
-	consumerMgr *inats.ConsumerManager
-	agentSvc    *agents.Service
-	repo        *Repository
-	memorySvc   *memory.Service
-	quotaSvc    *quota.Service
-	resultCh    <-chan *pb.TaskResponse
-	taskTimeout time.Duration
+	pool             *Pool
+	publisher        *inats.Publisher
+	consumerMgr      *inats.ConsumerManager
+	agentSvc         *agents.Service
+	repo             *Repository
+	memorySvc        *memory.Service
+	quotaSvc         *quota.Service
+	toolsSvc         *tools.Service
+	dlqPub           *inats.DLQPublisher
+	cb               *CircuitBreaker
+	pipelineResultFn PipelineResultFunc
+	resultCh         <-chan *pb.TaskResponse
+	taskTimeout      time.Duration
 
 	mu      sync.Mutex
 	pending map[string]*pendingTask
+}
+
+// SetPipelineResultFunc registers a callback for pipeline step results.
+func (d *Dispatcher) SetPipelineResultFunc(fn PipelineResultFunc) {
+	d.pipelineResultFn = fn
 }
 
 // NewDispatcher creates a new task dispatcher.
@@ -61,6 +79,8 @@ func NewDispatcher(
 	repo *Repository,
 	memorySvc *memory.Service,
 	quotaSvc *quota.Service,
+	toolsSvc *tools.Service,
+	dlqPub *inats.DLQPublisher,
 	resultCh <-chan *pb.TaskResponse,
 	taskTimeoutSec int,
 ) *Dispatcher {
@@ -76,6 +96,9 @@ func NewDispatcher(
 		repo:        repo,
 		memorySvc:   memorySvc,
 		quotaSvc:    quotaSvc,
+		toolsSvc:    toolsSvc,
+		dlqPub:      dlqPub,
+		cb:          NewCircuitBreaker(5, 30*time.Second),
 		resultCh:    resultCh,
 		taskTimeout: timeout,
 		pending:     make(map[string]*pendingTask),
@@ -137,12 +160,33 @@ func (d *Dispatcher) consumeTasks(ctx context.Context, consumer jetstream.Consum
 }
 
 func (d *Dispatcher) handleTask(ctx context.Context, msg jetstream.Msg) {
+	// Extract trace context from NATS headers
+	ctx = tracing.ExtractContext(ctx, msg)
+	tracer := tracing.Tracer("dispatcher")
+	ctx, span := tracer.Start(ctx, "dispatcher.handleTask")
+	defer span.End()
+
+	// Check if message has exceeded max delivery attempts — route to DLQ
+	if shouldDLQ, attempts := inats.ShouldDLQ(msg, inats.MaxDeliverDefault); shouldDLQ && d.dlqPub != nil {
+		d.dlqPub.PublishToDLQ(ctx, inats.SubjectDLQTasks, msg.Data(), "max delivery attempts exceeded", attempts)
+		_ = msg.Ack()
+		span.SetStatus(codes.Error, "routed to DLQ")
+		return
+	}
+
 	var task inats.TaskMessage
 	if err := json.Unmarshal(msg.Data(), &task); err != nil {
 		slog.Error("dispatcher: unmarshaling task", "error", err)
+		span.SetStatus(codes.Error, "unmarshal failed")
 		_ = msg.Nak()
 		return
 	}
+
+	span.SetAttributes(
+		attribute.String("request_id", task.RequestID),
+		attribute.String("agent_id", task.AgentID.String()),
+		attribute.String("channel", task.Channel),
+	)
 
 	// Fetch agent to get decrypted system prompt and LLM config
 	agent, err := d.agentSvc.GetByID(ctx, task.AgentID)
@@ -177,6 +221,13 @@ func (d *Dispatcher) handleTask(ctx context.Context, msg jetstream.Msg) {
 			_ = msg.Ack()
 			return
 		}
+	}
+
+	// Circuit breaker check
+	if d.cb != nil && !d.cb.Allow() {
+		slog.Warn("dispatcher: circuit breaker open, nacking for retry", "request_id", task.RequestID)
+		_ = msg.Nak()
+		return
 	}
 
 	// Select a worker
@@ -226,6 +277,28 @@ func (d *Dispatcher) handleTask(ctx context.Context, msg jetstream.Msg) {
 		}
 	}
 
+	// Fetch active tools for this agent
+	if d.toolsSvc != nil {
+		activeTools, err := d.toolsSvc.ListActiveByAgent(ctx, task.AgentID)
+		if err != nil {
+			slog.Warn("dispatcher: fetching tools", "error", err, "agent_id", task.AgentID)
+		} else {
+			for _, t := range activeTools {
+				taskReq.Tools = append(taskReq.Tools, &pb.ToolDefinition{
+					Name:           t.Name,
+					Description:    t.Description,
+					ParametersJson: string(t.Parameters),
+					EndpointUrl:    t.EndpointURL,
+					HttpMethod:     t.HTTPMethod,
+					HeadersJson:    string(t.Headers),
+					AuthType:       t.AuthType,
+					AuthConfigJson: string(t.AuthConfig),
+					TimeoutSec:     int32(t.TimeoutSec),
+				})
+			}
+		}
+	}
+
 	// Send to worker
 	if err := worker.Send(&pb.ServerMessage{
 		Payload: &pb.ServerMessage_TaskRequest{
@@ -233,26 +306,34 @@ func (d *Dispatcher) handleTask(ctx context.Context, msg jetstream.Msg) {
 		},
 	}); err != nil {
 		slog.Error("dispatcher: sending task to worker", "error", err, "worker_id", worker.WorkerID)
+		if d.cb != nil {
+			d.cb.RecordFailure()
+		}
 		_ = msg.Nak()
 		return
 	}
 
+	if d.cb != nil {
+		d.cb.RecordSuccess()
+	}
 	worker.IncrementActive()
 
 	// Track pending task
 	d.mu.Lock()
 	d.pending[task.RequestID] = &pendingTask{
-		RequestID:    task.RequestID,
-		AgentID:      task.AgentID,
-		OwnerUserID:  task.OwnerUserID,
-		FromJID:      task.FromJID,
-		AgentJID:     task.AgentJID,
-		AgentName:    task.AgentName,
-		WorkerID:     worker.WorkerID,
-		Input:        task.Message,
-		Channel:      task.Channel,
-		DispatchedAt: time.Now(),
-		MemoryConfig: memCfg,
+		RequestID:           task.RequestID,
+		AgentID:             task.AgentID,
+		OwnerUserID:         task.OwnerUserID,
+		FromJID:             task.FromJID,
+		AgentJID:            task.AgentJID,
+		AgentName:           task.AgentName,
+		WorkerID:            worker.WorkerID,
+		Input:               task.Message,
+		Channel:             task.Channel,
+		DispatchedAt:        time.Now(),
+		MemoryConfig:        memCfg,
+		PipelineExecutionID: task.PipelineExecutionID,
+		PipelineStepIndex:   task.PipelineStepIndex,
 	}
 	d.mu.Unlock()
 
@@ -278,6 +359,16 @@ func (d *Dispatcher) processResults(ctx context.Context) {
 }
 
 func (d *Dispatcher) handleResult(ctx context.Context, resp *pb.TaskResponse) {
+	tracer := tracing.Tracer("dispatcher")
+	ctx, span := tracer.Start(ctx, "dispatcher.handleResult")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("request_id", resp.RequestId),
+		attribute.String("worker_id", resp.WorkerId),
+		attribute.Int("tokens_used", int(resp.TokensUsed)),
+	)
+
 	d.mu.Lock()
 	pt, ok := d.pending[resp.RequestId]
 	if ok {
@@ -295,6 +386,14 @@ func (d *Dispatcher) handleResult(ctx context.Context, resp *pb.TaskResponse) {
 		w.DecrementActive()
 	}
 
+	// Pipeline result: route to callback instead of outbound message
+	if pt.PipelineExecutionID != "" && d.pipelineResultFn != nil {
+		d.pipelineResultFn(resp.RequestId, resp.ResponseText, int(resp.TokensUsed), int(resp.DurationMs), resp.ErrorMessage)
+		metrics.TasksCompletedTotal.WithLabelValues("completed").Inc()
+		slog.Debug("dispatcher: pipeline step result routed", "request_id", resp.RequestId, "pipeline_execution_id", pt.PipelineExecutionID)
+		return
+	}
+
 	goLatency := int(time.Since(pt.DispatchedAt).Milliseconds())
 
 	// Determine response body
@@ -303,7 +402,10 @@ func (d *Dispatcher) handleResult(ctx context.Context, resp *pb.TaskResponse) {
 	if resp.ErrorMessage != "" {
 		body = "Error processing your message: " + resp.ErrorMessage
 		status = "error"
+		span.SetStatus(codes.Error, resp.ErrorMessage)
 	}
+
+	span.SetAttributes(attribute.String("status", status))
 
 	// Publish outbound message
 	outbound := inats.OutboundMessage{
@@ -318,6 +420,18 @@ func (d *Dispatcher) handleResult(ctx context.Context, resp *pb.TaskResponse) {
 		slog.Error("dispatcher: publishing outbound", "error", err)
 	}
 
+	// Convert tools called
+	var toolCalls []tools.ToolCallRecord
+	for _, tc := range resp.ToolsCalled {
+		toolCalls = append(toolCalls, tools.ToolCallRecord{
+			ToolName:  tc.ToolName,
+			Arguments: tc.ArgumentsJson,
+			Result:    tc.ResultJson,
+			Duration:  int(tc.DurationMs),
+			Error:     tc.Error,
+		})
+	}
+
 	// Record execution
 	exec := &Execution{
 		ID:              uuid.New(),
@@ -326,6 +440,7 @@ func (d *Dispatcher) handleResult(ctx context.Context, resp *pb.TaskResponse) {
 		Input:           pt.Input,
 		Output:          resp.ResponseText,
 		TokensUsed:      int(resp.TokensUsed),
+		ToolsCalled:     tools.ToolsToJSON(toolCalls),
 		WorkerID:        resp.WorkerId,
 		DurationMs:      int(resp.DurationMs),
 		GoLatencyMs:     goLatency,

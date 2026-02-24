@@ -8,9 +8,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go/jetstream"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/aiox-platform/aiox/internal/governance/quota"
 	inats "github.com/aiox-platform/aiox/internal/nats"
+	"github.com/aiox-platform/aiox/internal/tracing"
 )
 
 // Orchestrator consumes inbound messages, validates ownership, routes them,
@@ -70,12 +72,25 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 }
 
 func (o *Orchestrator) processMessage(ctx context.Context, msg jetstream.Msg) {
+	// Extract trace context from NATS headers
+	ctx = tracing.ExtractContext(ctx, msg)
+	tracer := tracing.Tracer("orchestrator")
+	ctx, span := tracer.Start(ctx, "orchestrator.processMessage")
+	defer span.End()
+
 	var inbound inats.InboundMessage
 	if err := json.Unmarshal(msg.Data(), &inbound); err != nil {
 		slog.Error("unmarshaling inbound message", "error", err)
 		_ = msg.Nak()
 		return
 	}
+
+	span.SetAttributes(
+		attribute.String("message.id", inbound.ID),
+		attribute.String("message.from_jid", inbound.FromJID),
+		attribute.String("message.to_jid", inbound.ToJID),
+		attribute.String("message.channel", inbound.Channel),
+	)
 
 	slog.Debug("orchestrator processing message",
 		"id", inbound.ID,
