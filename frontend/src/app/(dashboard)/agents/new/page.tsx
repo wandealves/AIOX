@@ -9,7 +9,7 @@ export default function NewAgentPage() {
 
   return (
     <div>
-      <h2 className="mb-6 text-lg font-semibold text-gray-900">
+      <h2 className="mb-6 text-lg font-semibold text-[var(--foreground)]">
         Create New Agent
       </h2>
       <AgentForm

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 import type { Agent, CreateAgentRequest, UpdateAgentRequest } from "@/lib/types";
 
 interface AgentFormProps {
@@ -43,119 +44,150 @@ export function AgentForm({ agent, onSubmit, isLoading }: AgentFormProps) {
         llm_config: { provider: llmProvider, model: llmModel },
       };
       await onSubmit(data);
+      toast.success(agent ? "Agent updated!" : "Agent created!");
       router.push("/agents");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "An error occurred");
+      const msg = err instanceof Error ? err.message : "An error occurred";
+      setError(msg);
+      toast.error(msg);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="mx-auto max-w-2xl space-y-6">
-      {error && (
-        <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
-          {error}
+    <form onSubmit={handleSubmit} className="mx-auto max-w-2xl">
+      <div
+        className="rounded-xl border border-[var(--card-border)] bg-[var(--card)] p-6 md:p-8"
+        style={{ boxShadow: "var(--shadow-sm)" }}
+      >
+        {error && (
+          <div className="mb-6 rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-600">
+            {error}
+          </div>
+        )}
+
+        {/* General Info */}
+        <div className="mb-8">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--foreground-muted)]">
+            General Info
+          </h3>
+          <div className="mt-1 mb-5 h-px bg-[var(--card-border)]" />
+
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-[var(--foreground-muted)]">
+                Name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                className="w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 py-2.5 text-sm text-[var(--foreground)] outline-none transition-all focus:border-[var(--input-focus-border)] focus:ring-2 focus:ring-[var(--input-focus-ring)]"
+                placeholder="My Agent"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-[var(--foreground-muted)]">
+                Description
+              </label>
+              <input
+                type="text"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 py-2.5 text-sm text-[var(--foreground)] outline-none transition-all focus:border-[var(--input-focus-border)] focus:ring-2 focus:ring-[var(--input-focus-ring)]"
+                placeholder="A helpful assistant that..."
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-[var(--foreground-muted)]">
+                System Prompt
+              </label>
+              <textarea
+                value={systemPrompt}
+                onChange={(e) => setSystemPrompt(e.target.value)}
+                required
+                rows={6}
+                className="w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 py-2.5 text-sm text-[var(--foreground)] outline-none transition-all focus:border-[var(--input-focus-border)] focus:ring-2 focus:ring-[var(--input-focus-ring)]"
+                placeholder="You are a helpful assistant..."
+              />
+            </div>
+          </div>
         </div>
-      )}
 
-      <div>
-        <label className="mb-1.5 block text-sm font-medium text-gray-700">
-          Name
-        </label>
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-300 focus:ring-1 focus:ring-blue-300"
-          placeholder="My Agent"
-        />
-      </div>
+        {/* LLM Config */}
+        <div className="mb-8">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--foreground-muted)]">
+            LLM Configuration
+          </h3>
+          <div className="mt-1 mb-5 h-px bg-[var(--card-border)]" />
 
-      <div>
-        <label className="mb-1.5 block text-sm font-medium text-gray-700">
-          Description
-        </label>
-        <input
-          type="text"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-300 focus:ring-1 focus:ring-blue-300"
-          placeholder="A helpful assistant that..."
-        />
-      </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-[var(--foreground-muted)]">
+                Provider
+              </label>
+              <select
+                value={llmProvider}
+                onChange={(e) => setLlmProvider(e.target.value)}
+                className="w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 py-2.5 text-sm text-[var(--foreground)] outline-none transition-all focus:border-[var(--input-focus-border)] focus:ring-2 focus:ring-[var(--input-focus-ring)]"
+              >
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic</option>
+              </select>
+            </div>
 
-      <div>
-        <label className="mb-1.5 block text-sm font-medium text-gray-700">
-          System Prompt
-        </label>
-        <textarea
-          value={systemPrompt}
-          onChange={(e) => setSystemPrompt(e.target.value)}
-          required
-          rows={6}
-          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-300 focus:ring-1 focus:ring-blue-300"
-          placeholder="You are a helpful assistant..."
-        />
-      </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-[var(--foreground-muted)]">
+                Model
+              </label>
+              <input
+                type="text"
+                value={llmModel}
+                onChange={(e) => setLlmModel(e.target.value)}
+                className="w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 py-2.5 text-sm text-[var(--foreground)] outline-none transition-all focus:border-[var(--input-focus-border)] focus:ring-2 focus:ring-[var(--input-focus-ring)]"
+                placeholder="gpt-4"
+              />
+            </div>
+          </div>
+        </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-gray-700">
-            LLM Provider
-          </label>
+        {/* Visibility */}
+        <div className="mb-8">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--foreground-muted)]">
+            Visibility
+          </h3>
+          <div className="mt-1 mb-5 h-px bg-[var(--card-border)]" />
+
           <select
-            value={llmProvider}
-            onChange={(e) => setLlmProvider(e.target.value)}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-300"
+            value={visibility}
+            onChange={(e) => setVisibility(e.target.value)}
+            className="w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 py-2.5 text-sm text-[var(--foreground)] outline-none transition-all focus:border-[var(--input-focus-border)] focus:ring-2 focus:ring-[var(--input-focus-ring)]"
           >
-            <option value="openai">OpenAI</option>
-            <option value="anthropic">Anthropic</option>
+            <option value="private">Private</option>
+            <option value="public">Public</option>
           </select>
         </div>
 
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-gray-700">
-            Model
-          </label>
-          <input
-            type="text"
-            value={llmModel}
-            onChange={(e) => setLlmModel(e.target.value)}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-300 focus:ring-1 focus:ring-blue-300"
-            placeholder="gpt-4"
-          />
+        {/* Actions */}
+        <div className="flex gap-3">
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="rounded-xl bg-gradient-to-r from-primary-600 to-primary-700 px-5 py-2.5 text-sm font-semibold text-white transition-all hover:from-primary-700 hover:to-primary-800 active:scale-[0.98] disabled:opacity-50"
+            style={{ boxShadow: "var(--shadow-sm)" }}
+          >
+            {isLoading ? "Saving..." : agent ? "Update Agent" : "Create Agent"}
+          </button>
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="rounded-xl border border-[var(--card-border)] bg-[var(--card)] px-5 py-2.5 text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--background-tertiary)]"
+          >
+            Cancel
+          </button>
         </div>
-      </div>
-
-      <div>
-        <label className="mb-1.5 block text-sm font-medium text-gray-700">
-          Visibility
-        </label>
-        <select
-          value={visibility}
-          onChange={(e) => setVisibility(e.target.value)}
-          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-300"
-        >
-          <option value="private">Private</option>
-          <option value="public">Public</option>
-        </select>
-      </div>
-
-      <div className="flex gap-3">
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-        >
-          {isLoading ? "Saving..." : agent ? "Update Agent" : "Create Agent"}
-        </button>
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-        >
-          Cancel
-        </button>
       </div>
     </form>
   );

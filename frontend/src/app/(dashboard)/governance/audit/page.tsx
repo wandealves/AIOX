@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAuditLogs } from "@/hooks/use-governance";
 import { AuditTable } from "@/components/governance/audit-table";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function AuditPage() {
   const [page, setPage] = useState(1);
@@ -15,16 +16,18 @@ export default function AuditPage() {
 
   return (
     <div>
-      <h2 className="mb-6 text-lg font-semibold text-gray-900">Audit Logs</h2>
+      <h2 className="mb-6 text-lg font-semibold text-[var(--foreground)]">
+        Audit Logs
+      </h2>
 
-      <div className="mb-4 flex gap-3">
+      <div className="mb-4 flex flex-wrap gap-3">
         <select
           value={eventType}
           onChange={(e) => {
             setEventType(e.target.value);
             setPage(1);
           }}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+          className="rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--foreground)] outline-none transition-all focus:border-[var(--input-focus-border)] focus:ring-2 focus:ring-[var(--input-focus-ring)]"
         >
           <option value="">All Events</option>
           <option value="message_routed">Message Routed</option>
@@ -38,7 +41,7 @@ export default function AuditPage() {
             setSeverity(e.target.value);
             setPage(1);
           }}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+          className="rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--foreground)] outline-none transition-all focus:border-[var(--input-focus-border)] focus:ring-2 focus:ring-[var(--input-focus-ring)]"
         >
           <option value="">All Severities</option>
           <option value="info">Info</option>
@@ -48,8 +51,11 @@ export default function AuditPage() {
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center py-12">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+        <div className="space-y-2">
+          <Skeleton className="h-12 w-full rounded-lg" />
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-14 w-full rounded-lg" />
+          ))}
         </div>
       ) : (
         <AuditTable

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { MessageSquare } from "lucide-react";
 import { useAgent, useUpdateAgent } from "@/hooks/use-agents";
 import { AgentForm } from "@/components/agents/agent-form";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { UpdateAgentRequest } from "@/lib/types";
 
 export default function AgentDetailPage({
@@ -20,25 +21,33 @@ export default function AgentDetailPage({
 
   if (isLoading) {
     return (
-      <div className="flex justify-center py-12">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+      <div className="mx-auto max-w-2xl space-y-4">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-7 w-48" variant="text" />
+          <Skeleton className="h-10 w-24 rounded-lg" />
+        </div>
+        <Skeleton className="h-[500px] w-full rounded-xl" />
       </div>
     );
   }
 
   if (!agent) {
-    return <div className="text-center text-gray-500">Agent not found</div>;
+    return (
+      <div className="py-12 text-center text-[var(--foreground-muted)]">
+        Agent not found
+      </div>
+    );
   }
 
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">
+        <h2 className="text-lg font-semibold text-[var(--foreground)]">
           {agent.profile.name}
         </h2>
         <Link
           href={`/agents/${id}/chat`}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+          className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-primary-700 px-4 py-2 text-sm font-medium text-white transition-all hover:from-primary-700 hover:to-primary-800 active:scale-[0.98]"
         >
           <MessageSquare className="h-4 w-4" />
           Chat

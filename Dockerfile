@@ -20,6 +20,8 @@ RUN apk add --no-cache ca-certificates curl \
 COPY --from=builder /bin/aiox-api /usr/local/bin/aiox-api
 COPY --from=builder /app/migrations /app/migrations
 
+RUN mkdir -p /app/data/attachments && chown -R aiox:aiox /app/data
+
 USER aiox
 WORKDIR /app
 
