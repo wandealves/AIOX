@@ -22,6 +22,6 @@ RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTr
 COPY worker/worker/ /app/worker/
 
 # Fix generated import to be relative
-RUN sed -i 's/import worker_pb2/from . import worker_pb2/' /app/worker/worker_pb2_grpc.py
+RUN sed -i 's/^import worker_pb2/from . import worker_pb2/' /app/worker/worker_pb2_grpc.py
 
 CMD ["python", "-m", "worker.main"]
