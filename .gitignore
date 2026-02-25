@@ -41,3 +41,7 @@ docker/ejabberd/certs/
 .claude
 
 CLAUDE.md
+
+.venv
+
+__pycache__/

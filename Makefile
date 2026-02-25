@@ -73,12 +73,18 @@ security:
 # Run all checks: format, vet, test
 check: fmt-check vet test
 
-# Proto (generate Go code from .proto files)
+# Proto (generate Go + Python code from .proto files)
 proto:
 	protoc --proto_path=proto/worker/v1 \
 		--go_out=internal/worker/workerpb --go_opt=paths=source_relative \
 		--go-grpc_out=internal/worker/workerpb --go-grpc_opt=paths=source_relative \
 		worker.proto
+	worker/.venv/bin/python -m grpc_tools.protoc \
+		-I proto/worker/v1 \
+		--python_out=worker/worker \
+		--grpc_python_out=worker/worker \
+		proto/worker/v1/worker.proto
+	sed -i 's/^import worker_pb2/from . import worker_pb2/' worker/worker/worker_pb2_grpc.py
 
 # Frontend
 frontend-install:
