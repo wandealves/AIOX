@@ -5,35 +5,37 @@ import time
 import tracemalloc
 
 import grpc
-
-from .config import Config
-from .embedding import EmbeddingService
-from .llm.base import LLMProvider, LLMResponse
-from .llm.openai import OpenAIProvider
-from .llm.anthropic import AnthropicProvider
-from .memory import MemoryConfig, MemoryContext
-from .tools import ToolExecutor, proto_tools_to_openai_format, proto_tools_to_anthropic_format
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 # Import generated protobuf modules
-from . import worker_pb2
-from . import worker_pb2_grpc
+from . import worker_pb2, worker_pb2_grpc
+from .config import Config
+from .embedding import EmbeddingService
+from .llm.anthropic import AnthropicProvider
+from .llm.base import LLMProvider, LLMResponse
+from .llm.openai import OpenAIProvider
+from .memory import MemoryConfig, MemoryContext
+from .tools import (
+    ToolExecutor,
+    proto_tools_to_anthropic_format,
+    proto_tools_to_openai_format,
+)
 
 logger = logging.getLogger(__name__)
-
 
 def _setup_tracing(config: Config):
     """Initialize OpenTelemetry tracing if enabled."""
     if not config.tracing_enabled:
         return
     try:
-        from opentelemetry import trace
-        from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor
-        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-        from opentelemetry.sdk.resources import Resource
-
         resource = Resource.create({"service.name": f"aiox-worker-{config.worker_id}"})
-        exporter = OTLPSpanExporter(endpoint=config.tracing_otlp_endpoint, insecure=True)
+        exporter = OTLPSpanExporter(
+            endpoint=config.tracing_otlp_endpoint, insecure=True
+        )
         provider = TracerProvider(resource=resource)
         provider.add_span_processor(BatchSpanProcessor(exporter))
         trace.set_tracer_provider(provider)
@@ -55,6 +57,7 @@ class WorkerClient:
         self._tracer = None
         try:
             from opentelemetry import trace
+
             self._tracer = trace.get_tracer("aiox-worker")
         except ImportError:
             pass
@@ -64,7 +67,9 @@ class WorkerClient:
             self.providers["openai"] = OpenAIProvider(self.config.openai_api_key)
             logger.info("OpenAI provider configured")
         if self.config.anthropic_api_key:
-            self.providers["anthropic"] = AnthropicProvider(self.config.anthropic_api_key)
+            self.providers["anthropic"] = AnthropicProvider(
+                self.config.anthropic_api_key
+            )
             logger.info("Anthropic provider configured")
 
     def _get_provider(self, provider_name: str) -> LLMProvider | None:
@@ -78,9 +83,7 @@ class WorkerClient:
             except Exception as e:
                 logger.error("Connection error: %s", e)
 
-            logger.info(
-                "Reconnecting in %d seconds...", self.config.reconnect_delay
-            )
+            logger.info("Reconnecting in %d seconds...", self.config.reconnect_delay)
             await asyncio.sleep(self.config.reconnect_delay)
 
     async def _connect_and_process(self):
@@ -121,9 +124,7 @@ class WorkerClient:
             logger.info("Registered as %s", self.config.worker_id)
 
             # Start heartbeat task
-            heartbeat_task = asyncio.create_task(
-                self._heartbeat_loop(stub, metadata)
-            )
+            heartbeat_task = asyncio.create_task(self._heartbeat_loop(stub, metadata))
 
             # Process incoming tasks using stream.read() (not async for)
             try:
@@ -134,9 +135,7 @@ class WorkerClient:
                         break
                     task_req = server_msg.task_request
                     if task_req and task_req.request_id:
-                        asyncio.create_task(
-                            self._process_task(stream, task_req)
-                        )
+                        asyncio.create_task(self._process_task(stream, task_req))
             finally:
                 heartbeat_task.cancel()
                 try:
@@ -153,7 +152,6 @@ class WorkerClient:
             # Start a tracing span if available
             span = None
             if self._tracer:
-                from opentelemetry import trace
                 span = self._tracer.start_span(
                     "worker.process_task",
                     attributes={
@@ -175,7 +173,9 @@ class WorkerClient:
 
             # Build messages array with memory context if enabled
             messages = None
-            if mem_config.enabled and (mem_context.recent_messages or mem_context.relevant_memories):
+            if mem_config.enabled and (
+                mem_context.recent_messages or mem_context.relevant_memories
+            ):
                 messages = mem_context.build_messages_for_llm(
                     task_req.system_prompt, task_req.user_message
                 )
@@ -186,23 +186,28 @@ class WorkerClient:
                 for att in task_req.attachments:
                     if att.content_type.startswith("image/"):
                         import base64
+
                         b64 = base64.b64encode(att.content).decode("utf-8")
-                        attachment_parts.append({
-                            "type": "image",
-                            "filename": att.filename,
-                            "content_type": att.content_type,
-                            "data_b64": b64,
-                        })
+                        attachment_parts.append(
+                            {
+                                "type": "image",
+                                "filename": att.filename,
+                                "content_type": att.content_type,
+                                "data_b64": b64,
+                            }
+                        )
                     else:
                         try:
                             text_content = att.content.decode("utf-8")
                         except UnicodeDecodeError:
                             text_content = f"[Binary file: {att.filename}]"
-                        attachment_parts.append({
-                            "type": "text",
-                            "filename": att.filename,
-                            "content": text_content,
-                        })
+                        attachment_parts.append(
+                            {
+                                "type": "text",
+                                "filename": att.filename,
+                                "content": text_content,
+                            }
+                        )
 
             # Convert proto tools to LLM-specific format
             tools_for_llm = None
@@ -210,7 +215,11 @@ class WorkerClient:
             if task_req.tools:
                 tool_executor = ToolExecutor()
                 try:
-                    llm_config = json.loads(task_req.llm_config_json) if task_req.llm_config_json else {}
+                    llm_config = (
+                        json.loads(task_req.llm_config_json)
+                        if task_req.llm_config_json
+                        else {}
+                    )
                 except json.JSONDecodeError:
                     llm_config = {}
                 provider_name = llm_config.get("provider", "openai")
@@ -221,8 +230,10 @@ class WorkerClient:
                     tools_for_llm = proto_tools_to_openai_format(task_req.tools)
 
             response = await self._call_llm(
-                task_req, messages=messages,
-                tools=tools_for_llm, tool_executor=tool_executor,
+                task_req,
+                messages=messages,
+                tools=tools_for_llm,
+                tool_executor=tool_executor,
                 attachments=attachment_parts if attachment_parts else None,
             )
 
@@ -241,7 +252,11 @@ class WorkerClient:
 
             # Generate embedding for user message if long-term memory is enabled
             new_memories = []
-            if mem_config.enabled and mem_config.long_term_enabled and not response.error:
+            if (
+                mem_config.enabled
+                and mem_config.long_term_enabled
+                and not response.error
+            ):
                 try:
                     embedding = self.embedding_svc.embed(task_req.user_message)
                     new_memories.append(
@@ -249,11 +264,13 @@ class WorkerClient:
                             content=task_req.user_message,
                             embedding=embedding,
                             memory_type="conversation",
-                            metadata_json=json.dumps({
-                                "source": "user_message",
-                                "request_id": task_req.request_id,
-                                "agent_id": task_req.agent_id,
-                            }),
+                            metadata_json=json.dumps(
+                                {
+                                    "source": "user_message",
+                                    "request_id": task_req.request_id,
+                                    "agent_id": task_req.agent_id,
+                                }
+                            ),
                         )
                     )
                 except Exception as e:
@@ -302,7 +319,9 @@ class WorkerClient:
     ) -> LLMResponse:
         """Call the appropriate LLM provider based on agent's llm_config."""
         try:
-            llm_config = json.loads(task_req.llm_config_json) if task_req.llm_config_json else {}
+            llm_config = (
+                json.loads(task_req.llm_config_json) if task_req.llm_config_json else {}
+            )
         except json.JSONDecodeError:
             llm_config = {}
 
