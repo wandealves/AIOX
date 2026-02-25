@@ -2,7 +2,7 @@
 
 import { use } from "react";
 import Link from "next/link";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, Wrench } from "lucide-react";
 import { useAgent, useUpdateAgent } from "@/hooks/use-agents";
 import { AgentForm } from "@/components/agents/agent-form";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -45,13 +45,22 @@ export default function AgentDetailPage({
         <h2 className="text-lg font-semibold text-[var(--foreground)]">
           {agent.profile.name}
         </h2>
-        <Link
-          href={`/agents/${id}/chat`}
-          className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-primary-700 px-4 py-2 text-sm font-medium text-white transition-all hover:from-primary-700 hover:to-primary-800 active:scale-[0.98]"
-        >
-          <MessageSquare className="h-4 w-4" />
-          Chat
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/agents/${id}/tools`}
+            className="flex items-center gap-2 rounded-lg border border-[var(--card-border)] bg-[var(--card)] px-4 py-2 text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--background-tertiary)]"
+          >
+            <Wrench className="h-4 w-4" />
+            Tools
+          </Link>
+          <Link
+            href={`/agents/${id}/chat`}
+            className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-primary-700 px-4 py-2 text-sm font-medium text-white transition-all hover:from-primary-700 hover:to-primary-800 active:scale-[0.98]"
+          >
+            <MessageSquare className="h-4 w-4" />
+            Chat
+          </Link>
+        </div>
       </div>
       <AgentForm
         agent={agent}

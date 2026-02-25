@@ -159,6 +159,48 @@ export interface OrgInvite {
   created_at: string;
 }
 
+export interface ToolDefinition {
+  id: string;
+  agent_id: string;
+  name: string;
+  description: string;
+  parameters: Record<string, unknown> | null;
+  endpoint_url: string;
+  http_method: string;
+  headers: Record<string, string> | null;
+  auth_type: string;
+  auth_config: Record<string, unknown> | null;
+  is_active: boolean;
+  timeout_sec: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateToolRequest {
+  name: string;
+  description: string;
+  parameters?: Record<string, unknown>;
+  endpoint_url: string;
+  http_method: string;
+  headers?: Record<string, string>;
+  auth_type?: string;
+  auth_config?: Record<string, unknown>;
+  timeout_sec?: number;
+}
+
+export interface UpdateToolRequest {
+  name?: string;
+  description?: string;
+  parameters?: Record<string, unknown>;
+  endpoint_url?: string;
+  http_method?: string;
+  headers?: Record<string, string>;
+  auth_type?: string;
+  auth_config?: Record<string, unknown>;
+  is_active?: boolean;
+  timeout_sec?: number;
+}
+
 // WebSocket message types
 export interface WSServerMessage {
   type: "message" | "error";

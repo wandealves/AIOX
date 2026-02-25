@@ -53,6 +53,8 @@ export function Header() {
   }
   if (pathname.match(/^\/agents\/[^/]+\/chat$/)) {
     title = "Chat";
+  } else if (pathname.match(/^\/agents\/[^/]+\/tools$/)) {
+    title = "Agent Tools";
   } else if (pathname.match(/^\/agents\/[^/]+$/) && !pathname.endsWith("/new")) {
     title = "Agent Details";
   }

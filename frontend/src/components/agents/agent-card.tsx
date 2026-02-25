@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Bot, MessageSquare, Settings, Trash2 } from "lucide-react";
+import { Bot, MessageSquare, Settings, Trash2, Wrench } from "lucide-react";
 import { motion } from "framer-motion";
 import type { Agent } from "@/lib/types";
 
@@ -70,6 +70,13 @@ export function AgentCard({ agent, index = 0, onDelete }: AgentCardProps) {
           >
             <MessageSquare className="h-3.5 w-3.5" />
             Chat
+          </Link>
+          <Link
+            href={`/agents/${agent.id}/tools`}
+            className="flex items-center gap-1.5 rounded-lg bg-[var(--background-tertiary)] px-3 py-1.5 text-xs font-medium text-[var(--foreground-muted)] transition-colors hover:bg-[var(--card-hover)]"
+          >
+            <Wrench className="h-3.5 w-3.5" />
+            Tools
           </Link>
           <Link
             href={`/agents/${agent.id}`}
