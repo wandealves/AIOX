@@ -1,4 +1,4 @@
-from .openai_provider import OpenAIProvider
+from .openai import OpenAIProvider
 
 DEEPSEEK_API_BASE = "https://api.deepseek.com"
 DEFAULT_MODEL = "deepseek-chat"

@@ -157,18 +157,18 @@ make up
 
 Services started:
 
-| Service     | Port(s)          | Description                         |
-| ----------- | ---------------- | ----------------------------------- |
-| PostgreSQL  | 5433             | Primary database                    |
-| Redis       | 6379             | Cache + rate limiting               |
-| NATS        | 4222, 8222       | Message bus (HTTP monitor at :8222) |
-| ejabberd    | 5222, 5275, 5280 | XMPP server                         |
-| aiox-api    | 8080, 50051      | REST API + gRPC + WebSocket         |
-| aiox-worker | —                | Python AI worker                    |
-| aiox-admin  | 3000             | Next.js dashboard                   |
-| Jaeger      | 16686, 4317      | Trace collector + UI                |
-| Prometheus  | 9090             | Metrics scraper + alerting          |
-| Grafana     | 3001             | Dashboards + visualization          |
+| Service    | Port(s)          | Description                         |
+| ---------- | ---------------- | ----------------------------------- |
+| PostgreSQL | 5433             | Primary database                    |
+| Redis      | 6379             | Cache + rate limiting               |
+| NATS       | 4222, 8222       | Message bus (HTTP monitor at :8222) |
+| ejabberd   | 5222, 5275, 5280 | XMPP server                         |
+| aiox-api   | 8080, 50051      | REST API + gRPC + WebSocket         |
+| aiox-agent | —                | Python AI worker                    |
+| aiox-admin | 3000             | Next.js dashboard                   |
+| Jaeger     | 16686, 4317      | Trace collector + UI                |
+| Prometheus | 9090             | Metrics scraper + alerting          |
+| Grafana    | 3001             | Dashboards + visualization          |
 
 ### 5. Verify all services are healthy
 
@@ -1368,7 +1368,7 @@ docker compose logs aiox-api | grep -E "orchestrator|dispatcher|error"
 The circuit breaker opens after 5 consecutive gRPC failures. Check worker connectivity:
 
 ```bash
-docker compose logs aiox-worker --tail=50
+docker compose logs aiox-agent --tail=50
 curl http://localhost:8080/metrics | grep circuit_breaker
 ```
 

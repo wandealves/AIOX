@@ -4,7 +4,7 @@ import time
 
 from anthropic import AsyncAnthropic
 
-from .llm_provider import (
+from .base import (
     LLMProvider,
     LLMResponse,
     ToolCallResult,

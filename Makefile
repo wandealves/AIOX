@@ -79,12 +79,12 @@ proto:
 		--go_out=internal/worker/workerpb --go_opt=paths=source_relative \
 		--go-grpc_out=internal/worker/workerpb --go-grpc_opt=paths=source_relative \
 		worker.proto
-	worker/.venv/bin/python -m grpc_tools.protoc \
+	agent/.venv/bin/python -m grpc_tools.protoc \
 		-I proto/worker/v1 \
-		--python_out=worker/worker \
-		--grpc_python_out=worker/worker \
+		--python_out=agent/agent \
+		--grpc_python_out=agent/agent \
 		proto/worker/v1/worker.proto
-	sed -i 's/^import worker_pb2/from . import worker_pb2/' worker/worker/worker_pb2_grpc.py
+	sed -i 's/^import worker_pb2/from . import worker_pb2/' agent/agent/worker_pb2_grpc.py
 
 # admin
 admin-install:

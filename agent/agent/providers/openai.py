@@ -4,7 +4,7 @@ import time
 
 from openai import AsyncOpenAI
 
-from .llm_provider import (
+from .base import (
     LLMProvider,
     LLMResponse,
     ToolCallResult,

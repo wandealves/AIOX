@@ -4,7 +4,7 @@ import time
 
 import httpx
 
-from .llm_provider import (
+from .base import (
     LLMProvider,
     LLMResponse,
     ToolCallResult,

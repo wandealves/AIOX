@@ -14,7 +14,7 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from . import worker_pb2, worker_pb2_grpc
 from .config import Config
 from .embedding import EmbeddingService
-from .llm.providers import (
+from .providers import (
     AnthropicProvider,
     DeepSeekProvider,
     GeminiProvider,
@@ -34,7 +34,7 @@ def _setup_tracing(config: Config):
     if not config.tracing_enabled:
         return
     try:
-        resource = Resource.create({"service.name": f"aiox-worker-{config.worker_id}"})
+        resource = Resource.create({"service.name": f"aiox-agent-{config.worker_id}"})
         exporter = OTLPSpanExporter(
             endpoint=config.tracing_otlp_endpoint, insecure=True
         )
@@ -60,7 +60,7 @@ class WorkerClient:
         try:
             from opentelemetry import trace
 
-            self._tracer = trace.get_tracer("aiox-worker")
+            self._tracer = trace.get_tracer("aiox-agent")
         except ImportError:
             pass
 

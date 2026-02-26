@@ -2,7 +2,7 @@ import json
 import logging
 import time
 
-from .llm_provider import (
+from .base import (
     LLMProvider,
     LLMResponse,
     ToolCallResult,

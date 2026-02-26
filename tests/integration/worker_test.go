@@ -19,7 +19,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/aiox-platform/aiox/internal/agents"
 	inats "github.com/aiox-platform/aiox/internal/nats"
 	"github.com/aiox-platform/aiox/internal/worker"
 	pb "github.com/aiox-platform/aiox/internal/worker/workerpb"
@@ -102,7 +101,7 @@ func TestWorkerEndToEnd(t *testing.T) {
 	err = stream.Send(&pb.WorkerMessage{
 		Payload: &pb.WorkerMessage_Register{
 			Register: &pb.RegisterWorker{
-				WorkerId:           "test-worker-1",
+				WorkerId:           "test-agent-1",
 				MaxConcurrent:      4,
 				SupportedProviders: []string{"openai"},
 			},
@@ -156,7 +155,7 @@ func TestWorkerEndToEnd(t *testing.T) {
 		Payload: &pb.WorkerMessage_TaskResponse{
 			TaskResponse: &pb.TaskResponse{
 				RequestId:    requestID,
-				WorkerId:     "test-worker-1",
+				WorkerId:     "test-agent-1",
 				ResponseText: "Hello! I'm the test bot.",
 				TokensUsed:   42,
 				DurationMs:   100,
@@ -179,7 +178,7 @@ func TestWorkerEndToEnd(t *testing.T) {
 
 	// Test heartbeat
 	hbResp, err := client.Heartbeat(ctx, &pb.HeartbeatRequest{
-		WorkerId:      "test-worker-1",
+		WorkerId:      "test-agent-1",
 		ActiveTasks:   1,
 		MemoryUsageMb: 128,
 	})
