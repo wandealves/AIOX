@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Bot, MessageSquare, Settings, Trash2, Wrench } from "lucide-react";
 import { motion } from "framer-motion";
 import type { Agent } from "@/lib/types";
+import { getProviderLabel, providerBadgeStyle } from "@/lib/llm-providers";
 
 interface AgentCardProps {
   agent: Agent;
@@ -44,8 +45,10 @@ export function AgentCard({ agent, index = 0, onDelete }: AgentCardProps) {
 
           {/* Provider badge */}
           {provider && (
-            <span className="rounded-full bg-[var(--background-tertiary)] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--foreground-muted)]">
-              {provider}
+            <span
+              className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${providerBadgeStyle(provider)}`}
+            >
+              {getProviderLabel(provider)}
             </span>
           )}
         </div>

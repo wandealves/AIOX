@@ -4,12 +4,15 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import type { Agent, CreateAgentRequest, UpdateAgentRequest } from "@/lib/types";
+import { LLM_PROVIDERS, getProviderConfig } from "@/lib/llm-providers";
 
 interface AgentFormProps {
   agent?: Agent;
   onSubmit: (data: CreateAgentRequest | UpdateAgentRequest) => Promise<void>;
   isLoading?: boolean;
 }
+
+const CUSTOM_MODEL_VALUE = "__custom__";
 
 export function AgentForm({ agent, onSubmit, isLoading }: AgentFormProps) {
   const router = useRouter();
@@ -27,9 +30,33 @@ export function AgentForm({ agent, onSubmit, isLoading }: AgentFormProps) {
     (agent?.llm_config as Record<string, string>)?.provider || "openai"
   );
   const [llmModel, setLlmModel] = useState(
-    (agent?.llm_config as Record<string, string>)?.model || "gpt-4"
+    (agent?.llm_config as Record<string, string>)?.model || "gpt-4o-mini"
   );
   const [error, setError] = useState("");
+
+  // Determine whether the current model is a custom (not in the provider's list)
+  const providerModels = getProviderConfig(llmProvider)?.models ?? [];
+  const isCustom = llmModel !== "" && !providerModels.some((m) => m.value === llmModel);
+  const [useCustomModel, setUseCustomModel] = useState(isCustom);
+
+  const handleProviderChange = (newProvider: string) => {
+    setLlmProvider(newProvider);
+    const config = getProviderConfig(newProvider);
+    if (config) {
+      setLlmModel(config.defaultModel);
+      setUseCustomModel(false);
+    }
+  };
+
+  const handleModelSelectChange = (value: string) => {
+    if (value === CUSTOM_MODEL_VALUE) {
+      setUseCustomModel(true);
+      setLlmModel("");
+    } else {
+      setUseCustomModel(false);
+      setLlmModel(value);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,6 +79,9 @@ export function AgentForm({ agent, onSubmit, isLoading }: AgentFormProps) {
       toast.error(msg);
     }
   };
+
+  const inputClass =
+    "w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 py-2.5 text-sm text-[var(--foreground)] outline-none transition-all focus:border-[var(--input-focus-border)] focus:ring-2 focus:ring-[var(--input-focus-ring)]";
 
   return (
     <form onSubmit={handleSubmit} className="mx-auto max-w-2xl">
@@ -82,7 +112,7 @@ export function AgentForm({ agent, onSubmit, isLoading }: AgentFormProps) {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                className="w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 py-2.5 text-sm text-[var(--foreground)] outline-none transition-all focus:border-[var(--input-focus-border)] focus:ring-2 focus:ring-[var(--input-focus-ring)]"
+                className={inputClass}
                 placeholder="My Agent"
               />
             </div>
@@ -95,7 +125,7 @@ export function AgentForm({ agent, onSubmit, isLoading }: AgentFormProps) {
                 type="text"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 py-2.5 text-sm text-[var(--foreground)] outline-none transition-all focus:border-[var(--input-focus-border)] focus:ring-2 focus:ring-[var(--input-focus-ring)]"
+                className={inputClass}
                 placeholder="A helpful assistant that..."
               />
             </div>
@@ -109,7 +139,7 @@ export function AgentForm({ agent, onSubmit, isLoading }: AgentFormProps) {
                 onChange={(e) => setSystemPrompt(e.target.value)}
                 required
                 rows={6}
-                className="w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 py-2.5 text-sm text-[var(--foreground)] outline-none transition-all focus:border-[var(--input-focus-border)] focus:ring-2 focus:ring-[var(--input-focus-ring)]"
+                className={inputClass}
                 placeholder="You are a helpful assistant..."
               />
             </div>
@@ -124,33 +154,65 @@ export function AgentForm({ agent, onSubmit, isLoading }: AgentFormProps) {
           <div className="mt-1 mb-5 h-px bg-[var(--card-border)]" />
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {/* Provider */}
             <div>
               <label className="mb-1.5 block text-sm font-medium text-[var(--foreground-muted)]">
                 Provider
               </label>
               <select
                 value={llmProvider}
-                onChange={(e) => setLlmProvider(e.target.value)}
-                className="w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 py-2.5 text-sm text-[var(--foreground)] outline-none transition-all focus:border-[var(--input-focus-border)] focus:ring-2 focus:ring-[var(--input-focus-ring)]"
+                onChange={(e) => handleProviderChange(e.target.value)}
+                className={inputClass}
               >
-                <option value="openai">OpenAI</option>
-                <option value="anthropic">Anthropic</option>
+                {LLM_PROVIDERS.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
               </select>
             </div>
 
+            {/* Model */}
             <div>
               <label className="mb-1.5 block text-sm font-medium text-[var(--foreground-muted)]">
                 Model
+              </label>
+              <select
+                value={useCustomModel ? CUSTOM_MODEL_VALUE : llmModel}
+                onChange={(e) => handleModelSelectChange(e.target.value)}
+                className={inputClass}
+              >
+                {providerModels.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+                <option value={CUSTOM_MODEL_VALUE}>Custom model...</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Custom model text input — shown only when "Custom model..." is selected */}
+          {useCustomModel && (
+            <div className="mt-3">
+              <label className="mb-1.5 block text-sm font-medium text-[var(--foreground-muted)]">
+                Custom model name
               </label>
               <input
                 type="text"
                 value={llmModel}
                 onChange={(e) => setLlmModel(e.target.value)}
-                className="w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 py-2.5 text-sm text-[var(--foreground)] outline-none transition-all focus:border-[var(--input-focus-border)] focus:ring-2 focus:ring-[var(--input-focus-ring)]"
-                placeholder="gpt-4"
+                required
+                className={inputClass}
+                placeholder={
+                  llmProvider === "ollama"
+                    ? "e.g. llama3.2:70b"
+                    : "e.g. gpt-4-custom"
+                }
+                autoFocus
               />
             </div>
-          </div>
+          )}
         </div>
 
         {/* Visibility */}
@@ -163,7 +225,7 @@ export function AgentForm({ agent, onSubmit, isLoading }: AgentFormProps) {
           <select
             value={visibility}
             onChange={(e) => setVisibility(e.target.value)}
-            className="w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 py-2.5 text-sm text-[var(--foreground)] outline-none transition-all focus:border-[var(--input-focus-border)] focus:ring-2 focus:ring-[var(--input-focus-ring)]"
+            className={inputClass}
           >
             <option value="private">Private</option>
             <option value="public">Public</option>
