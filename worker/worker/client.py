@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-import time
 import tracemalloc
 
 import grpc
@@ -15,17 +14,20 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from . import worker_pb2, worker_pb2_grpc
 from .config import Config
 from .embedding import EmbeddingService
-from .llm.anthropic import AnthropicProvider
-from .llm.base import LLMProvider, LLMResponse
-from .llm.openai import OpenAIProvider
-from .memory import MemoryConfig, MemoryContext
-from .tools import (
-    ToolExecutor,
-    proto_tools_to_anthropic_format,
-    proto_tools_to_openai_format,
+from .llm.providers import (
+    AnthropicProvider,
+    DeepSeekProvider,
+    GeminiProvider,
+    LLMProvider,
+    LLMResponse,
+    OllamaProvider,
+    OpenAIProvider,
 )
+from .memory import MemoryConfig, MemoryContext
+from .tools import ToolExecutor, proto_tools_to_openai_format
 
 logger = logging.getLogger(__name__)
+
 
 def _setup_tracing(config: Config):
     """Initialize OpenTelemetry tracing if enabled."""
@@ -71,6 +73,19 @@ class WorkerClient:
                 self.config.anthropic_api_key
             )
             logger.info("Anthropic provider configured")
+        if self.config.deepseek_api_key:
+            self.providers["deepseek"] = DeepSeekProvider(self.config.deepseek_api_key)
+            logger.info("DeepSeek provider configured")
+        if self.config.gemini_api_key:
+            self.providers["gemini"] = GeminiProvider(self.config.gemini_api_key)
+            logger.info("Gemini provider configured")
+        self.providers["ollama"] = OllamaProvider(
+            model=self.config.ollama_default_model,
+            base_url=self.config.ollama_base_url,
+        )
+        logger.info(
+            "Ollama provider configured (model=%s)", self.config.ollama_default_model
+        )
 
     def _get_provider(self, provider_name: str) -> LLMProvider | None:
         return self.providers.get(provider_name)
@@ -214,20 +229,10 @@ class WorkerClient:
             tool_executor = None
             if task_req.tools:
                 tool_executor = ToolExecutor()
-                try:
-                    llm_config = (
-                        json.loads(task_req.llm_config_json)
-                        if task_req.llm_config_json
-                        else {}
-                    )
-                except json.JSONDecodeError:
-                    llm_config = {}
-                provider_name = llm_config.get("provider", "openai")
-
-                if provider_name == "anthropic":
-                    tools_for_llm = proto_tools_to_anthropic_format(task_req.tools)
-                else:
-                    tools_for_llm = proto_tools_to_openai_format(task_req.tools)
+                # All providers receive OpenAI-formatted tools with private execution
+                # metadata (_endpoint_url, _http_method, etc.). Each provider converts
+                # to its own API format internally before calling the LLM.
+                tools_for_llm = proto_tools_to_openai_format(task_req.tools)
 
             response = await self._call_llm(
                 task_req,

@@ -24,6 +24,10 @@ DEFAULT_MODEL = "gpt-4o-mini"
 class OpenAIProvider(LLMProvider):
     """OpenAI chat completions provider with tool/function calling support."""
 
+    # Subclasses can override this to change the default model without
+    # duplicating the generate() method (e.g. DeepSeekProvider).
+    _default_model: str = DEFAULT_MODEL
+
     def __init__(self, api_key: str, base_url: str | None = None):
         """Initialize OpenAI provider.
 
@@ -49,7 +53,7 @@ class OpenAIProvider(LLMProvider):
         tool_executor: ToolExecutor | None = None,
         attachments: list[dict] | None = None,
     ) -> LLMResponse:
-        model = model or DEFAULT_MODEL
+        model = model or self._default_model
         # Work on a copy to avoid mutating the caller's list
         messages = list(messages) if messages is not None else [
             {"role": "system", "content": system_prompt},

@@ -16,11 +16,18 @@ class Config:
         # LLM API keys
         self.openai_api_key = os.getenv("OPENAI_API_KEY", "")
         self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        self.deepseek_api_key = os.getenv("DEEPSEEK_API_KEY", "")
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
+
+        # Ollama (always available as a local provider)
         self.ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        self.ollama_default_model = os.getenv("OLLAMA_DEFAULT_MODEL", "llama3.2")
 
         # Tracing
         self.tracing_enabled = os.getenv("TRACING_ENABLED", "").lower() in ("true", "1")
-        self.tracing_otlp_endpoint = os.getenv("TRACING_OTLP_ENDPOINT", "localhost:4317")
+        self.tracing_otlp_endpoint = os.getenv(
+            "TRACING_OTLP_ENDPOINT", "localhost:4317"
+        )
 
     @property
     def grpc_target(self) -> str:
@@ -33,5 +40,9 @@ class Config:
             providers.append("openai")
         if self.anthropic_api_key:
             providers.append("anthropic")
+        if self.deepseek_api_key:
+            providers.append("deepseek")
+        if self.gemini_api_key:
+            providers.append("gemini")
         providers.append("ollama")  # always available (local)
         return providers
