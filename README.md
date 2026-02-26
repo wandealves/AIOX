@@ -11,7 +11,7 @@ Agents support **tool/function calling** (HTTP API invocation), **pipeline chain
 - [Architecture](#architecture)
 - [Prerequisites](#prerequisites)
 - [Quick Start (Docker)](#quick-start-docker)
-- [Frontend Dashboard](#frontend-dashboard)
+- [Admin Dashboard](#admin-dashboard)
 - [TLS Setup for XMPP Clients](#tls-setup-for-xmpp-clients)
 - [Registering XMPP Users](#registering-xmpp-users)
 - [Local Development](#local-development)
@@ -69,19 +69,19 @@ Browser ──► Next.js Dashboard ──► REST API                          
 
 ### Stack
 
-| Layer                 | Technology                      |
-| --------------------- | ------------------------------- |
-| Frontend              | Next.js 14 + TypeScript + Tailwind |
-| HTTP API              | Go + chi                        |
-| Real-time             | WebSocket (nhooyr.io/websocket) |
-| Async messaging       | NATS JetStream (4 streams + DLQ)|
-| XMPP server           | ejabberd                        |
-| AI workers            | Python 3.12 + gRPC              |
-| Database              | PostgreSQL 16 + pgvector        |
-| Cache / Rate limiting | Redis 7                         |
-| Tracing               | OpenTelemetry + Jaeger          |
-| Metrics               | Prometheus + Grafana            |
-| Scheduling            | robfig/cron (Go)                |
+| Layer                 | Technology                         |
+| --------------------- | ---------------------------------- |
+| Admin                 | Next.js 14 + TypeScript + Tailwind |
+| HTTP API              | Go + chi                           |
+| Real-time             | WebSocket (nhooyr.io/websocket)    |
+| Async messaging       | NATS JetStream (4 streams + DLQ)   |
+| XMPP server           | ejabberd                           |
+| AI workers            | Python 3.12 + gRPC                 |
+| Database              | PostgreSQL 16 + pgvector           |
+| Cache / Rate limiting | Redis 7                            |
+| Tracing               | OpenTelemetry + Jaeger             |
+| Metrics               | Prometheus + Grafana               |
+| Scheduling            | robfig/cron (Go)                   |
 
 ---
 
@@ -92,7 +92,7 @@ Browser ──► Next.js Dashboard ──► REST API                          
 | Docker         | 24+             | All services                                    |
 | Docker Compose | v2              | Orchestration                                   |
 | Go             | 1.24            | Local dev / unit tests                          |
-| Node.js        | 20+             | Frontend local dev                              |
+| Node.js        | 20+             | Admin local dev                                 |
 | Python         | 3.12            | Worker local dev                                |
 | `openssl`      | any             | TLS certificate generation                      |
 | An XMPP client | —               | Chat with agents (e.g. [Dino](https://dino.im)) |
@@ -157,18 +157,18 @@ make up
 
 Services started:
 
-| Service        | Port(s)          | Description                         |
-| -------------- | ---------------- | ----------------------------------- |
-| PostgreSQL     | 5433             | Primary database                    |
-| Redis          | 6379             | Cache + rate limiting               |
-| NATS           | 4222, 8222       | Message bus (HTTP monitor at :8222) |
-| ejabberd       | 5222, 5275, 5280 | XMPP server                         |
-| aiox-api       | 8080, 50051      | REST API + gRPC + WebSocket         |
-| aiox-worker    | —                | Python AI worker                    |
-| aiox-frontend  | 3000             | Next.js dashboard                   |
-| Jaeger         | 16686, 4317      | Trace collector + UI                |
-| Prometheus     | 9090             | Metrics scraper + alerting          |
-| Grafana        | 3001             | Dashboards + visualization          |
+| Service     | Port(s)          | Description                         |
+| ----------- | ---------------- | ----------------------------------- |
+| PostgreSQL  | 5433             | Primary database                    |
+| Redis       | 6379             | Cache + rate limiting               |
+| NATS        | 4222, 8222       | Message bus (HTTP monitor at :8222) |
+| ejabberd    | 5222, 5275, 5280 | XMPP server                         |
+| aiox-api    | 8080, 50051      | REST API + gRPC + WebSocket         |
+| aiox-worker | —                | Python AI worker                    |
+| aiox-admin  | 3000             | Next.js dashboard                   |
+| Jaeger      | 16686, 4317      | Trace collector + UI                |
+| Prometheus  | 9090             | Metrics scraper + alerting          |
+| Grafana     | 3001             | Dashboards + visualization          |
 
 ### 5. Verify all services are healthy
 
@@ -190,28 +190,28 @@ Expected response:
 
 ---
 
-## Frontend Dashboard
+## Admin Dashboard
 
 AIOX includes a **Next.js 14** web dashboard for managing agents, chatting in real-time, and monitoring governance.
 
 ### Pages
 
-| Page | Path | Description |
-| ---- | ---- | ----------- |
-| Login | `/login` | Email + password authentication |
-| Register | `/register` | New account creation |
-| Dashboard | `/dashboard` | Overview with agent count, token usage, request stats |
-| Agents | `/agents` | List, create, edit, delete agents |
-| Agent Chat | `/agents/{id}/chat` | Real-time chat via WebSocket |
-| Quotas | `/governance/quota` | Token and request usage visualization |
-| Audit Logs | `/governance/audit` | Filterable audit log viewer |
-| Admin Users | `/admin/users` | User management (admin only) |
-| Admin Stats | `/admin/stats` | Platform-wide statistics (admin only) |
+| Page        | Path                | Description                                           |
+| ----------- | ------------------- | ----------------------------------------------------- |
+| Login       | `/login`            | Email + password authentication                       |
+| Register    | `/register`         | New account creation                                  |
+| Dashboard   | `/dashboard`        | Overview with agent count, token usage, request stats |
+| Agents      | `/agents`           | List, create, edit, delete agents                     |
+| Agent Chat  | `/agents/{id}/chat` | Real-time chat via WebSocket                          |
+| Quotas      | `/governance/quota` | Token and request usage visualization                 |
+| Audit Logs  | `/governance/audit` | Filterable audit log viewer                           |
+| Admin Users | `/admin/users`      | User management (admin only)                          |
+| Admin Stats | `/admin/stats`      | Platform-wide statistics (admin only)                 |
 
 ### Running locally
 
 ```bash
-cd frontend
+cd admin
 npm install
 npm run dev
 # Dashboard available at http://localhost:3000
@@ -219,7 +219,7 @@ npm run dev
 
 ### Environment variables
 
-Create `frontend/.env.local`:
+Create `admin/.env.local`:
 
 ```bash
 NEXT_PUBLIC_API_URL=http://localhost:8080
@@ -423,20 +423,20 @@ openssl rand -hex 32
 
 ### Tracing (OpenTelemetry)
 
-| Env var                  | Default          | Description                            |
-| ------------------------ | ---------------- | -------------------------------------- |
-| `TRACING_ENABLED`        | `false`          | Enable distributed tracing             |
-| `TRACING_OTLP_ENDPOINT`  | `localhost:4317` | OTLP gRPC collector (e.g. Jaeger)      |
-| `TRACING_SERVICE_NAME`   | `aiox-api`       | Service name in traces                 |
-| `TRACING_SAMPLE_RATE`    | `1.0`            | Sampling rate (0.0–1.0)               |
+| Env var                 | Default          | Description                       |
+| ----------------------- | ---------------- | --------------------------------- |
+| `TRACING_ENABLED`       | `false`          | Enable distributed tracing        |
+| `TRACING_OTLP_ENDPOINT` | `localhost:4317` | OTLP gRPC collector (e.g. Jaeger) |
+| `TRACING_SERVICE_NAME`  | `aiox-api`       | Service name in traces            |
+| `TRACING_SAMPLE_RATE`   | `1.0`            | Sampling rate (0.0–1.0)           |
 
 ### Storage (Attachments)
 
-| Env var               | Default              | Description                      |
-| --------------------- | -------------------- | -------------------------------- |
-| `STORAGE_BACKEND`     | `local`              | Storage backend (`local`)        |
-| `STORAGE_LOCAL_PATH`  | `./data/attachments` | Local filesystem path            |
-| `STORAGE_MAX_SIZE_MB` | `10`                 | Max upload size in MB            |
+| Env var               | Default              | Description               |
+| --------------------- | -------------------- | ------------------------- |
+| `STORAGE_BACKEND`     | `local`              | Storage backend (`local`) |
+| `STORAGE_LOCAL_PATH`  | `./data/attachments` | Local filesystem path     |
+| `STORAGE_MAX_SIZE_MB` | `10`                 | Max upload size in MB     |
 
 ### Logging
 
@@ -1054,20 +1054,21 @@ Access the Jaeger UI at `http://localhost:16686`.
 
 Available at `GET /metrics`. Key metrics:
 
-| Metric | Type | Description |
-| ------ | ---- | ----------- |
-| `aiox_http_requests_total` | Counter | HTTP requests by method, path, status |
-| `aiox_http_request_duration_seconds` | Histogram | Request latency |
-| `aiox_tasks_dispatched_total` | Counter | Tasks sent to workers |
-| `aiox_tasks_completed_total` | Counter | Tasks completed |
-| `aiox_worker_pool_connected` | Gauge | Connected workers |
-| `aiox_circuit_breaker_state` | Gauge | 0=closed, 1=open, 2=half-open |
-| `aiox_circuit_breaker_trips_total` | Counter | Circuit breaker trips |
-| `aiox_dlq_messages_total` | Counter | Dead-letter queue messages |
+| Metric                               | Type      | Description                           |
+| ------------------------------------ | --------- | ------------------------------------- |
+| `aiox_http_requests_total`           | Counter   | HTTP requests by method, path, status |
+| `aiox_http_request_duration_seconds` | Histogram | Request latency                       |
+| `aiox_tasks_dispatched_total`        | Counter   | Tasks sent to workers                 |
+| `aiox_tasks_completed_total`         | Counter   | Tasks completed                       |
+| `aiox_worker_pool_connected`         | Gauge     | Connected workers                     |
+| `aiox_circuit_breaker_state`         | Gauge     | 0=closed, 1=open, 2=half-open         |
+| `aiox_circuit_breaker_trips_total`   | Counter   | Circuit breaker trips                 |
+| `aiox_dlq_messages_total`            | Counter   | Dead-letter queue messages            |
 
 #### Grafana Dashboards
 
 Pre-provisioned at `http://localhost:3001` with:
+
 - HTTP request rates and latency
 - Task throughput and worker pool status
 - Circuit breaker state
@@ -1075,12 +1076,12 @@ Pre-provisioned at `http://localhost:3001` with:
 
 #### Alert Rules (Prometheus)
 
-| Alert | Condition |
-| ----- | --------- |
-| `NoWorkersConnected` | `aiox_worker_pool_connected == 0` for 2 min |
-| `HighErrorRate` | 5xx rate > 10% for 5 min |
-| `CircuitBreakerOpen` | Circuit breaker open for 1 min |
-| `DLQMessagesAccumulating` | > 10 DLQ messages/hour |
+| Alert                     | Condition                                   |
+| ------------------------- | ------------------------------------------- |
+| `NoWorkersConnected`      | `aiox_worker_pool_connected == 0` for 2 min |
+| `HighErrorRate`           | 5xx rate > 10% for 5 min                    |
+| `CircuitBreakerOpen`      | Circuit breaker open for 1 min              |
+| `DLQMessagesAccumulating` | > 10 DLQ messages/hour                      |
 
 #### Dead-Letter Queue
 
@@ -1138,18 +1139,18 @@ The Python worker connects to the Go API via gRPC and processes LLM tasks. It su
 
 ### Environment Variables
 
-| Env var               | Default                  | Description                                    |
-| --------------------- | ------------------------ | ---------------------------------------------- |
-| `WORKER_ID`           | `worker-{pid}`           | Unique identifier                              |
-| `GRPC_HOST`           | `localhost`              | API server hostname                            |
-| `GRPC_PORT`           | `50051`                  | gRPC port                                      |
-| `GRPC_WORKER_API_KEY` | —                        | Must match `GRPC_WORKER_API_KEY` in API config |
-| `MAX_CONCURRENT`      | `4`                      | Max parallel tasks                             |
-| `OPENAI_API_KEY`      | —                        | Enables OpenAI provider                        |
-| `ANTHROPIC_API_KEY`   | —                        | Enables Anthropic provider                     |
-| `OLLAMA_BASE_URL`     | `http://localhost:11434` | Ollama endpoint (always enabled)               |
-| `TRACING_ENABLED`     | `false`                  | Enable OpenTelemetry tracing                   |
-| `TRACING_OTLP_ENDPOINT` | `localhost:4317`      | OTLP gRPC collector endpoint                   |
+| Env var                 | Default                  | Description                                    |
+| ----------------------- | ------------------------ | ---------------------------------------------- |
+| `WORKER_ID`             | `worker-{pid}`           | Unique identifier                              |
+| `GRPC_HOST`             | `localhost`              | API server hostname                            |
+| `GRPC_PORT`             | `50051`                  | gRPC port                                      |
+| `GRPC_WORKER_API_KEY`   | —                        | Must match `GRPC_WORKER_API_KEY` in API config |
+| `MAX_CONCURRENT`        | `4`                      | Max parallel tasks                             |
+| `OPENAI_API_KEY`        | —                        | Enables OpenAI provider                        |
+| `ANTHROPIC_API_KEY`     | —                        | Enables Anthropic provider                     |
+| `OLLAMA_BASE_URL`       | `http://localhost:11434` | Ollama endpoint (always enabled)               |
+| `TRACING_ENABLED`       | `false`                  | Enable OpenTelemetry tracing                   |
+| `TRACING_OTLP_ENDPOINT` | `localhost:4317`         | OTLP gRPC collector endpoint                   |
 
 ### Running multiple workers
 
@@ -1190,9 +1191,9 @@ make check              # fmt-check + vet + test
 
 make proto              # Regenerate gRPC code from worker.proto
 
-make frontend-install   # Install frontend dependencies
-make frontend-dev       # Run frontend dev server (port 3000)
-make frontend-build     # Build frontend for production
+make admin-install      # Install admin dependencies
+make admin-dev          # Run admin dev server (port 3000)
+make admin-build        # Build admin for production
 ```
 
 ---
@@ -1261,7 +1262,7 @@ aiox/
 │   ├── middleware/              # Logging, CORS, security headers, metrics
 │   ├── metrics/                 # Prometheus metric definitions
 │   └── users/                   # User model + repository
-├── frontend/                    # Next.js 14 dashboard
+├── admin/                    # Next.js 14 dashboard
 │   ├── src/
 │   │   ├── app/                 # App Router pages (14 routes)
 │   │   ├── components/          # UI components (chat, agents, governance)
@@ -1269,7 +1270,7 @@ aiox/
 │   │   ├── lib/                 # API client, WS client, types
 │   │   └── providers/           # Auth + Query providers
 │   ├── Dockerfile               # Multi-stage Node.js image
-│   └── .env.local.example       # Frontend env template
+│   └── .env.local.example       # Admin env template
 ├── worker/                      # Python AI worker
 │   ├── Dockerfile
 │   ├── requirements.txt
@@ -1298,7 +1299,7 @@ aiox/
 │   └── postgres/init.sql        # DB initialization
 ├── .github/workflows/ci.yml     # GitHub Actions: test + lint + build
 ├── Dockerfile                   # Multi-stage Go API image
-├── docker-compose.yml           # Full stack (API + frontend + monitoring)
+├── docker-compose.yml           # Full stack (API + admin + monitoring)
 ├── Makefile
 └── .env.example                 # Configuration template
 ```

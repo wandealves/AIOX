@@ -1,4 +1,4 @@
-.PHONY: build dev run test test-integration up down migrate-up migrate-down migrate-create lint clean proto docker-build vet fmt fmt-check security check frontend-install frontend-dev frontend-build
+.PHONY: build dev run test test-integration up down migrate-up migrate-down migrate-create lint clean proto docker-build vet fmt fmt-check security check admin-install admin-dev admin-build
 
 # Variables
 APP_NAME=aiox-api
@@ -86,15 +86,15 @@ proto:
 		proto/worker/v1/worker.proto
 	sed -i 's/^import worker_pb2/from . import worker_pb2/' worker/worker/worker_pb2_grpc.py
 
-# Frontend
-frontend-install:
-	cd frontend && npm install
+# admin
+admin-install:
+	cd admin && npm install
 
-frontend-dev:
-	cd frontend && npm run dev
+admin-dev:
+	cd admin && npm run dev
 
-frontend-build:
-	cd frontend && npm run build
+admin-build:
+	cd admin && npm run build
 
 # Clean
 clean:
