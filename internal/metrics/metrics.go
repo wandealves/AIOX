@@ -84,6 +84,32 @@ var (
 			Help: "Total number of times the circuit breaker tripped to open.",
 		},
 	)
+
+	// Tool execution metrics (Phase 12)
+	ToolExecutionsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "aiox_tool_executions_total",
+			Help: "Total tool executions.",
+		},
+		[]string{"tool_name", "tool_type", "status"},
+	)
+
+	ToolExecutionDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "aiox_tool_execution_duration_seconds",
+			Help:    "Tool execution duration in seconds.",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"tool_name", "tool_type"},
+	)
+
+	ToolErrorsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "aiox_tool_errors_total",
+			Help: "Total tool execution errors.",
+		},
+		[]string{"tool_name", "error_type"},
+	)
 )
 
 func init() {
@@ -99,5 +125,8 @@ func init() {
 		DLQMessagesTotal,
 		CircuitBreakerState,
 		CircuitBreakerTripsTotal,
+		ToolExecutionsTotal,
+		ToolExecutionDuration,
+		ToolErrorsTotal,
 	)
 }

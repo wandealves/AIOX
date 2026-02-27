@@ -9,20 +9,23 @@ import (
 
 // ToolDefinition represents an external tool that an agent can invoke.
 type ToolDefinition struct {
-	ID          uuid.UUID       `json:"id"`
-	AgentID     uuid.UUID       `json:"agent_id"`
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Parameters  json.RawMessage `json:"parameters"`
-	EndpointURL string          `json:"endpoint_url"`
-	HTTPMethod  string          `json:"http_method"`
-	Headers     json.RawMessage `json:"headers"`
-	AuthType    string          `json:"auth_type"`
-	AuthConfig  json.RawMessage `json:"auth_config"`
-	IsActive    bool            `json:"is_active"`
-	TimeoutSec  int             `json:"timeout_sec"`
-	CreatedAt   time.Time       `json:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at"`
+	ID           uuid.UUID       `json:"id"`
+	AgentID      uuid.UUID       `json:"agent_id"`
+	Name         string          `json:"name"`
+	Description  string          `json:"description"`
+	Parameters   json.RawMessage `json:"parameters"`
+	EndpointURL  string          `json:"endpoint_url"`
+	HTTPMethod   string          `json:"http_method"`
+	Headers      json.RawMessage `json:"headers"`
+	AuthType     string          `json:"auth_type"`
+	AuthConfig   json.RawMessage `json:"auth_config"`
+	IsActive     bool            `json:"is_active"`
+	TimeoutSec   int             `json:"timeout_sec"`
+	Version      string          `json:"version"`
+	Category     string          `json:"category"`
+	OutputSchema json.RawMessage `json:"output_schema"`
+	CreatedAt    time.Time       `json:"created_at"`
+	UpdatedAt    time.Time       `json:"updated_at"`
 }
 
 // CreateToolRequest is the request body for creating a tool.

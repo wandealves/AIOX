@@ -13,8 +13,8 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/aiox-platform/aiox/internal/agents"
-	"github.com/aiox-platform/aiox/internal/attachments"
 	"github.com/aiox-platform/aiox/internal/api"
+	"github.com/aiox-platform/aiox/internal/attachments"
 	"github.com/aiox-platform/aiox/internal/auth"
 	"github.com/aiox-platform/aiox/internal/chat"
 	"github.com/aiox-platform/aiox/internal/config"
@@ -28,8 +28,9 @@ import (
 	"github.com/aiox-platform/aiox/internal/orchestrator"
 	"github.com/aiox-platform/aiox/internal/orgs"
 	"github.com/aiox-platform/aiox/internal/pipelines"
-	"github.com/aiox-platform/aiox/internal/scheduler"
+	"github.com/aiox-platform/aiox/internal/plugins"
 	iredis "github.com/aiox-platform/aiox/internal/redis"
+	"github.com/aiox-platform/aiox/internal/scheduler"
 	"github.com/aiox-platform/aiox/internal/server"
 	"github.com/aiox-platform/aiox/internal/tools"
 	"github.com/aiox-platform/aiox/internal/tracing"
@@ -177,12 +178,29 @@ func main() {
 	toolsSvc := tools.NewService(toolsRepo, cfg.Encryption.Key)
 	toolsHandler := tools.NewHandler(toolsSvc)
 
+	// System tools (Phase 12)
+	systemToolsRepo := tools.NewSystemRepository(pool)
+	systemToolsSvc := tools.NewSystemService(systemToolsRepo, cfg.Encryption.Key)
+	systemToolsHandler := tools.NewSystemHandler(systemToolsSvc)
+
+	// Tool registry (Phase 12) — merges system + agent tools
+	toolsRegistry := tools.NewRegistry(systemToolsSvc, toolsSvc)
+
+	// MCP handler (Phase 12)
+	mcpHandler := tools.NewMCPHandler(toolsSvc)
+
+	// Plugins (Phase 12)
+	pluginsRepo := plugins.NewRepository(pool)
+	pluginsSvc := plugins.NewService(pluginsRepo, systemToolsRepo)
+	pluginsHandler := plugins.NewHandler(pluginsSvc)
+
 	// Task dispatcher: NATS tasks → gRPC workers → outbound messages
 	dispatcher := worker.NewDispatcher(
 		workerPool, publisher, consumerMgr,
 		agentSvc, workerRepo, memorySvc, quotaSvc, toolsSvc, dlqPub, grpcWorkerServer.ResultChannel(),
 		cfg.GRPC.TaskTimeoutSec,
 	)
+	dispatcher.SetToolsRegistry(toolsRegistry)
 
 	// Pipelines (Phase 11B)
 	pipelinesRepo := pipelines.NewRepository(pool)
@@ -298,6 +316,20 @@ func main() {
 		ExecutePipeline: pipelinesHandler.Execute,
 		ListExecutions:  pipelinesHandler.ListExecutions,
 		GetExecution:    pipelinesHandler.GetExecution,
+
+		CreateSystemTool: systemToolsHandler.Create,
+		ListSystemTools:  systemToolsHandler.List,
+		GetSystemTool:    systemToolsHandler.Get,
+		UpdateSystemTool: systemToolsHandler.Update,
+		DeleteSystemTool: systemToolsHandler.Delete,
+
+		RegisterPlugin: pluginsHandler.Register,
+		ListPlugins:    pluginsHandler.List,
+		DeletePlugin:   pluginsHandler.Delete,
+		SyncPlugin:     pluginsHandler.Sync,
+
+		ExportMCPTools: mcpHandler.ExportMCPTools,
+		ImportMCPTools: mcpHandler.ImportMCPTools,
 
 		AuthMiddleware: auth.Middleware(authSvc),
 

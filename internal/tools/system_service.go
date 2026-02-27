@@ -10,29 +10,33 @@ import (
 	"github.com/aiox-platform/aiox/internal/auth"
 )
 
-// Service provides business logic for tool definitions.
-type Service struct {
-	repo      *Repository
+// SystemService provides business logic for system tool definitions.
+type SystemService struct {
+	repo      *SystemRepository
 	encryptor *auth.Encryptor
 }
 
-// NewService creates a new tools Service.
-// encryptor is used to encrypt auth_config before storage.
-func NewService(repo *Repository, encryptionKey string) *Service {
+// NewSystemService creates a new system tools Service.
+func NewSystemService(repo *SystemRepository, encryptionKey string) *SystemService {
 	var enc *auth.Encryptor
 	if encryptionKey != "" {
 		enc, _ = auth.NewEncryptor(encryptionKey)
 	}
-	return &Service{repo: repo, encryptor: enc}
+	return &SystemService{repo: repo, encryptor: enc}
 }
 
-// Create creates a new tool definition for an agent.
-func (s *Service) Create(ctx context.Context, agentID uuid.UUID, req CreateToolRequest) (*ToolDefinition, error) {
+// Create creates a new system tool.
+func (s *SystemService) Create(ctx context.Context, req CreateSystemToolRequest) (*SystemTool, error) {
 	now := time.Now().UTC()
 
 	params := req.Parameters
 	if len(params) == 0 {
 		params = json.RawMessage(`{}`)
+	}
+
+	outputSchema := req.OutputSchema
+	if len(outputSchema) == 0 {
+		outputSchema = json.RawMessage(`{}`)
 	}
 
 	headers := req.Headers
@@ -45,14 +49,26 @@ func (s *Service) Create(ctx context.Context, agentID uuid.UUID, req CreateToolR
 		authConfig = json.RawMessage(`{}`)
 	}
 
-	outputSchema := json.RawMessage(`{}`)
-
-	// Encrypt auth_config if encryptor is available
-	if s.encryptor != nil && len(authConfig) > 2 { // > "{}"
+	if s.encryptor != nil && len(authConfig) > 2 {
 		encrypted, err := s.encryptor.Encrypt(string(authConfig))
 		if err == nil {
 			authConfig = json.RawMessage(`"` + encrypted + `"`)
 		}
+	}
+
+	toolType := req.ToolType
+	if toolType == "" {
+		toolType = "builtin"
+	}
+
+	category := req.Category
+	if category == "" {
+		category = "utilities"
+	}
+
+	httpMethod := req.HTTPMethod
+	if httpMethod == "" {
+		httpMethod = "GET"
 	}
 
 	timeoutSec := req.TimeoutSec
@@ -60,25 +76,27 @@ func (s *Service) Create(ctx context.Context, agentID uuid.UUID, req CreateToolR
 		timeoutSec = 30
 	}
 
-	version := "1.0.0"
-	category := "custom"
+	version := req.Version
+	if version == "" {
+		version = "1.0.0"
+	}
 
-	tool := &ToolDefinition{
+	tool := &SystemTool{
 		ID:           uuid.New(),
-		AgentID:      agentID,
 		Name:         req.Name,
 		Description:  req.Description,
+		Category:     category,
 		Parameters:   params,
+		OutputSchema: outputSchema,
+		ToolType:     toolType,
 		EndpointURL:  req.EndpointURL,
-		HTTPMethod:   req.HTTPMethod,
+		HTTPMethod:   httpMethod,
 		Headers:      headers,
 		AuthType:     req.AuthType,
 		AuthConfig:   authConfig,
 		IsActive:     true,
 		TimeoutSec:   timeoutSec,
 		Version:      version,
-		Category:     category,
-		OutputSchema: outputSchema,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
@@ -89,23 +107,28 @@ func (s *Service) Create(ctx context.Context, agentID uuid.UUID, req CreateToolR
 	return tool, nil
 }
 
-// GetByID returns a tool definition by ID.
-func (s *Service) GetByID(ctx context.Context, toolID uuid.UUID) (*ToolDefinition, error) {
+// GetByID returns a system tool by ID.
+func (s *SystemService) GetByID(ctx context.Context, toolID uuid.UUID) (*SystemTool, error) {
 	return s.repo.GetByID(ctx, toolID)
 }
 
-// ListByAgent returns all tools for an agent.
-func (s *Service) ListByAgent(ctx context.Context, agentID uuid.UUID) ([]*ToolDefinition, error) {
-	return s.repo.ListByAgent(ctx, agentID)
+// GetByName returns a system tool by name.
+func (s *SystemService) GetByName(ctx context.Context, name string) (*SystemTool, error) {
+	return s.repo.GetByName(ctx, name)
 }
 
-// ListActiveByAgent returns only active tools for an agent.
-func (s *Service) ListActiveByAgent(ctx context.Context, agentID uuid.UUID) ([]*ToolDefinition, error) {
-	return s.repo.ListActiveByAgent(ctx, agentID)
+// List returns all system tools.
+func (s *SystemService) List(ctx context.Context) ([]*SystemTool, error) {
+	return s.repo.List(ctx)
 }
 
-// Update updates an existing tool definition.
-func (s *Service) Update(ctx context.Context, toolID uuid.UUID, req UpdateToolRequest) (*ToolDefinition, error) {
+// ListActive returns only active system tools.
+func (s *SystemService) ListActive(ctx context.Context) ([]*SystemTool, error) {
+	return s.repo.ListActive(ctx)
+}
+
+// Update updates an existing system tool.
+func (s *SystemService) Update(ctx context.Context, toolID uuid.UUID, req UpdateSystemToolRequest) (*SystemTool, error) {
 	tool, err := s.repo.GetByID(ctx, toolID)
 	if err != nil || tool == nil {
 		return nil, err
@@ -117,8 +140,17 @@ func (s *Service) Update(ctx context.Context, toolID uuid.UUID, req UpdateToolRe
 	if req.Description != nil {
 		tool.Description = *req.Description
 	}
+	if req.Category != nil {
+		tool.Category = *req.Category
+	}
 	if req.Parameters != nil {
 		tool.Parameters = *req.Parameters
+	}
+	if req.OutputSchema != nil {
+		tool.OutputSchema = *req.OutputSchema
+	}
+	if req.ToolType != nil {
+		tool.ToolType = *req.ToolType
 	}
 	if req.EndpointURL != nil {
 		tool.EndpointURL = *req.EndpointURL
@@ -148,6 +180,9 @@ func (s *Service) Update(ctx context.Context, toolID uuid.UUID, req UpdateToolRe
 	if req.TimeoutSec != nil {
 		tool.TimeoutSec = *req.TimeoutSec
 	}
+	if req.Version != nil {
+		tool.Version = *req.Version
+	}
 	tool.UpdatedAt = time.Now().UTC()
 
 	if err := s.repo.Update(ctx, tool); err != nil {
@@ -156,12 +191,7 @@ func (s *Service) Update(ctx context.Context, toolID uuid.UUID, req UpdateToolRe
 	return tool, nil
 }
 
-// Delete deletes a tool definition.
-func (s *Service) Delete(ctx context.Context, toolID uuid.UUID) error {
+// Delete deletes a system tool.
+func (s *SystemService) Delete(ctx context.Context, toolID uuid.UUID) error {
 	return s.repo.Delete(ctx, toolID)
-}
-
-// ToolBelongsToAgent checks if a tool belongs to a specific agent.
-func (s *Service) ToolBelongsToAgent(ctx context.Context, toolID, agentID uuid.UUID) (bool, error) {
-	return s.repo.ToolBelongsToAgent(ctx, toolID, agentID)
 }

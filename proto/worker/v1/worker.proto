@@ -54,6 +54,22 @@ message ToolDefinition {
   string auth_type = 7;          // "", "bearer", "api_key"
   string auth_config_json = 8;   // JSON: {"token": "..."} or {"key": "...", "header": "X-Api-Key"}
   int32 timeout_sec = 9;
+  string version = 10;
+  string category = 11;
+  string tool_type = 12;         // "builtin" | "http"
+  string output_schema_json = 13;
+  repeated string depends_on = 14;     // names of tools that must execute before this one
+  int32 max_chain_depth = 15;          // max dependency depth (default 5)
+}
+
+// ToolContext provides execution context for tools.
+message ToolContext {
+  string agent_id = 1;
+  string user_id = 2;
+  string session_id = 3;
+  string correlation_id = 4;     // trace_id from OpenTelemetry
+  string permissions_json = 5;   // JSON with agent permissions
+  string metadata_json = 6;      // additional metadata (org_id, channel, etc.)
 }
 
 // ToolCall represents a single invocation of a tool during task processing.
@@ -87,6 +103,7 @@ message TaskRequest {
   string memory_config_json = 11;  // JSON: memory configuration from agent
   repeated ToolDefinition tools = 12; // Available tools for this agent
   repeated Attachment attachments = 13; // File/image attachments
+  ToolContext tool_context = 15;       // Execution context for tools
 }
 
 // TaskResponse is sent from the worker back to the server with the LLM result.

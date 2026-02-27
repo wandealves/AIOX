@@ -2,7 +2,9 @@ package tools
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -42,6 +44,11 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	tool, err := h.svc.Create(r.Context(), agentID, req)
 	if err != nil {
+		slog.Error("failed to create tool", "error", err, "agent_id", agentID, "tool_name", req.Name)
+		if strings.Contains(err.Error(), "idx_agent_tools_unique") {
+			api.JSONErrorMessage(w, http.StatusConflict, "a tool with this name already exists for this agent")
+			return
+		}
 		api.JSONErrorMessage(w, http.StatusInternalServerError, "failed to create tool")
 		return
 	}

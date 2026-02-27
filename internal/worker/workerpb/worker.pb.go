@@ -303,18 +303,24 @@ func (x *RegisterAck) GetMessage() string {
 
 // ToolDefinition describes an external tool that an agent can invoke during LLM execution.
 type ToolDefinition struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Name           string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Description    string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	ParametersJson string                 `protobuf:"bytes,3,opt,name=parameters_json,json=parametersJson,proto3" json:"parameters_json,omitempty"`   // JSON Schema for tool parameters
-	EndpointUrl    string                 `protobuf:"bytes,4,opt,name=endpoint_url,json=endpointUrl,proto3" json:"endpoint_url,omitempty"`            // HTTP endpoint to call
-	HttpMethod     string                 `protobuf:"bytes,5,opt,name=http_method,json=httpMethod,proto3" json:"http_method,omitempty"`               // GET, POST, PUT, DELETE
-	HeadersJson    string                 `protobuf:"bytes,6,opt,name=headers_json,json=headersJson,proto3" json:"headers_json,omitempty"`            // JSON: {"Authorization": "Bearer ..."}
-	AuthType       string                 `protobuf:"bytes,7,opt,name=auth_type,json=authType,proto3" json:"auth_type,omitempty"`                     // "", "bearer", "api_key"
-	AuthConfigJson string                 `protobuf:"bytes,8,opt,name=auth_config_json,json=authConfigJson,proto3" json:"auth_config_json,omitempty"` // JSON: {"token": "..."} or {"key": "...", "header": "X-Api-Key"}
-	TimeoutSec     int32                  `protobuf:"varint,9,opt,name=timeout_sec,json=timeoutSec,proto3" json:"timeout_sec,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Name             string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description      string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	ParametersJson   string                 `protobuf:"bytes,3,opt,name=parameters_json,json=parametersJson,proto3" json:"parameters_json,omitempty"`   // JSON Schema for tool parameters
+	EndpointUrl      string                 `protobuf:"bytes,4,opt,name=endpoint_url,json=endpointUrl,proto3" json:"endpoint_url,omitempty"`            // HTTP endpoint to call
+	HttpMethod       string                 `protobuf:"bytes,5,opt,name=http_method,json=httpMethod,proto3" json:"http_method,omitempty"`               // GET, POST, PUT, DELETE
+	HeadersJson      string                 `protobuf:"bytes,6,opt,name=headers_json,json=headersJson,proto3" json:"headers_json,omitempty"`            // JSON: {"Authorization": "Bearer ..."}
+	AuthType         string                 `protobuf:"bytes,7,opt,name=auth_type,json=authType,proto3" json:"auth_type,omitempty"`                     // "", "bearer", "api_key"
+	AuthConfigJson   string                 `protobuf:"bytes,8,opt,name=auth_config_json,json=authConfigJson,proto3" json:"auth_config_json,omitempty"` // JSON: {"token": "..."} or {"key": "...", "header": "X-Api-Key"}
+	TimeoutSec       int32                  `protobuf:"varint,9,opt,name=timeout_sec,json=timeoutSec,proto3" json:"timeout_sec,omitempty"`
+	Version          string                 `protobuf:"bytes,10,opt,name=version,proto3" json:"version,omitempty"`
+	Category         string                 `protobuf:"bytes,11,opt,name=category,proto3" json:"category,omitempty"`
+	ToolType         string                 `protobuf:"bytes,12,opt,name=tool_type,json=toolType,proto3" json:"tool_type,omitempty"` // "builtin" | "http"
+	OutputSchemaJson string                 `protobuf:"bytes,13,opt,name=output_schema_json,json=outputSchemaJson,proto3" json:"output_schema_json,omitempty"`
+	DependsOn        []string               `protobuf:"bytes,14,rep,name=depends_on,json=dependsOn,proto3" json:"depends_on,omitempty"`                // names of tools that must execute before this one
+	MaxChainDepth    int32                  `protobuf:"varint,15,opt,name=max_chain_depth,json=maxChainDepth,proto3" json:"max_chain_depth,omitempty"` // max dependency depth (default 5)
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ToolDefinition) Reset() {
@@ -410,6 +416,133 @@ func (x *ToolDefinition) GetTimeoutSec() int32 {
 	return 0
 }
 
+func (x *ToolDefinition) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *ToolDefinition) GetCategory() string {
+	if x != nil {
+		return x.Category
+	}
+	return ""
+}
+
+func (x *ToolDefinition) GetToolType() string {
+	if x != nil {
+		return x.ToolType
+	}
+	return ""
+}
+
+func (x *ToolDefinition) GetOutputSchemaJson() string {
+	if x != nil {
+		return x.OutputSchemaJson
+	}
+	return ""
+}
+
+func (x *ToolDefinition) GetDependsOn() []string {
+	if x != nil {
+		return x.DependsOn
+	}
+	return nil
+}
+
+func (x *ToolDefinition) GetMaxChainDepth() int32 {
+	if x != nil {
+		return x.MaxChainDepth
+	}
+	return 0
+}
+
+// ToolContext provides execution context for tools.
+type ToolContext struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	AgentId         string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	UserId          string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	SessionId       string                 `protobuf:"bytes,3,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	CorrelationId   string                 `protobuf:"bytes,4,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`       // trace_id from OpenTelemetry
+	PermissionsJson string                 `protobuf:"bytes,5,opt,name=permissions_json,json=permissionsJson,proto3" json:"permissions_json,omitempty"` // JSON with agent permissions
+	MetadataJson    string                 `protobuf:"bytes,6,opt,name=metadata_json,json=metadataJson,proto3" json:"metadata_json,omitempty"`          // additional metadata (org_id, channel, etc.)
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ToolContext) Reset() {
+	*x = ToolContext{}
+	mi := &file_worker_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ToolContext) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ToolContext) ProtoMessage() {}
+
+func (x *ToolContext) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ToolContext.ProtoReflect.Descriptor instead.
+func (*ToolContext) Descriptor() ([]byte, []int) {
+	return file_worker_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ToolContext) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *ToolContext) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *ToolContext) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *ToolContext) GetCorrelationId() string {
+	if x != nil {
+		return x.CorrelationId
+	}
+	return ""
+}
+
+func (x *ToolContext) GetPermissionsJson() string {
+	if x != nil {
+		return x.PermissionsJson
+	}
+	return ""
+}
+
+func (x *ToolContext) GetMetadataJson() string {
+	if x != nil {
+		return x.MetadataJson
+	}
+	return ""
+}
+
 // ToolCall represents a single invocation of a tool during task processing.
 type ToolCall struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -424,7 +557,7 @@ type ToolCall struct {
 
 func (x *ToolCall) Reset() {
 	*x = ToolCall{}
-	mi := &file_worker_proto_msgTypes[5]
+	mi := &file_worker_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -436,7 +569,7 @@ func (x *ToolCall) String() string {
 func (*ToolCall) ProtoMessage() {}
 
 func (x *ToolCall) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_proto_msgTypes[5]
+	mi := &file_worker_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -449,7 +582,7 @@ func (x *ToolCall) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolCall.ProtoReflect.Descriptor instead.
 func (*ToolCall) Descriptor() ([]byte, []int) {
-	return file_worker_proto_rawDescGZIP(), []int{5}
+	return file_worker_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ToolCall) GetToolName() string {
@@ -499,7 +632,7 @@ type Attachment struct {
 
 func (x *Attachment) Reset() {
 	*x = Attachment{}
-	mi := &file_worker_proto_msgTypes[6]
+	mi := &file_worker_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -511,7 +644,7 @@ func (x *Attachment) String() string {
 func (*Attachment) ProtoMessage() {}
 
 func (x *Attachment) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_proto_msgTypes[6]
+	mi := &file_worker_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -524,7 +657,7 @@ func (x *Attachment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Attachment.ProtoReflect.Descriptor instead.
 func (*Attachment) Descriptor() ([]byte, []int) {
-	return file_worker_proto_rawDescGZIP(), []int{6}
+	return file_worker_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Attachment) GetFilename() string {
@@ -564,13 +697,14 @@ type TaskRequest struct {
 	MemoryConfigJson  string                 `protobuf:"bytes,11,opt,name=memory_config_json,json=memoryConfigJson,proto3" json:"memory_config_json,omitempty"`    // JSON: memory configuration from agent
 	Tools             []*ToolDefinition      `protobuf:"bytes,12,rep,name=tools,proto3" json:"tools,omitempty"`                                                    // Available tools for this agent
 	Attachments       []*Attachment          `protobuf:"bytes,13,rep,name=attachments,proto3" json:"attachments,omitempty"`                                        // File/image attachments
+	ToolContext       *ToolContext           `protobuf:"bytes,15,opt,name=tool_context,json=toolContext,proto3" json:"tool_context,omitempty"`                     // Execution context for tools
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
 
 func (x *TaskRequest) Reset() {
 	*x = TaskRequest{}
-	mi := &file_worker_proto_msgTypes[7]
+	mi := &file_worker_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -582,7 +716,7 @@ func (x *TaskRequest) String() string {
 func (*TaskRequest) ProtoMessage() {}
 
 func (x *TaskRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_proto_msgTypes[7]
+	mi := &file_worker_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -595,7 +729,7 @@ func (x *TaskRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskRequest.ProtoReflect.Descriptor instead.
 func (*TaskRequest) Descriptor() ([]byte, []int) {
-	return file_worker_proto_rawDescGZIP(), []int{7}
+	return file_worker_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *TaskRequest) GetRequestId() string {
@@ -689,6 +823,13 @@ func (x *TaskRequest) GetAttachments() []*Attachment {
 	return nil
 }
 
+func (x *TaskRequest) GetToolContext() *ToolContext {
+	if x != nil {
+		return x.ToolContext
+	}
+	return nil
+}
+
 // TaskResponse is sent from the worker back to the server with the LLM result.
 type TaskResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -707,7 +848,7 @@ type TaskResponse struct {
 
 func (x *TaskResponse) Reset() {
 	*x = TaskResponse{}
-	mi := &file_worker_proto_msgTypes[8]
+	mi := &file_worker_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -719,7 +860,7 @@ func (x *TaskResponse) String() string {
 func (*TaskResponse) ProtoMessage() {}
 
 func (x *TaskResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_proto_msgTypes[8]
+	mi := &file_worker_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -732,7 +873,7 @@ func (x *TaskResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskResponse.ProtoReflect.Descriptor instead.
 func (*TaskResponse) Descriptor() ([]byte, []int) {
-	return file_worker_proto_rawDescGZIP(), []int{8}
+	return file_worker_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *TaskResponse) GetRequestId() string {
@@ -811,7 +952,7 @@ type MemoryEntry struct {
 
 func (x *MemoryEntry) Reset() {
 	*x = MemoryEntry{}
-	mi := &file_worker_proto_msgTypes[9]
+	mi := &file_worker_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -823,7 +964,7 @@ func (x *MemoryEntry) String() string {
 func (*MemoryEntry) ProtoMessage() {}
 
 func (x *MemoryEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_proto_msgTypes[9]
+	mi := &file_worker_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -836,7 +977,7 @@ func (x *MemoryEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MemoryEntry.ProtoReflect.Descriptor instead.
 func (*MemoryEntry) Descriptor() ([]byte, []int) {
-	return file_worker_proto_rawDescGZIP(), []int{9}
+	return file_worker_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *MemoryEntry) GetContent() string {
@@ -880,7 +1021,7 @@ type HeartbeatRequest struct {
 
 func (x *HeartbeatRequest) Reset() {
 	*x = HeartbeatRequest{}
-	mi := &file_worker_proto_msgTypes[10]
+	mi := &file_worker_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -892,7 +1033,7 @@ func (x *HeartbeatRequest) String() string {
 func (*HeartbeatRequest) ProtoMessage() {}
 
 func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_proto_msgTypes[10]
+	mi := &file_worker_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -905,7 +1046,7 @@ func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatRequest.ProtoReflect.Descriptor instead.
 func (*HeartbeatRequest) Descriptor() ([]byte, []int) {
-	return file_worker_proto_rawDescGZIP(), []int{10}
+	return file_worker_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *HeartbeatRequest) GetWorkerId() string {
@@ -946,7 +1087,7 @@ type HeartbeatResponse struct {
 
 func (x *HeartbeatResponse) Reset() {
 	*x = HeartbeatResponse{}
-	mi := &file_worker_proto_msgTypes[11]
+	mi := &file_worker_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -958,7 +1099,7 @@ func (x *HeartbeatResponse) String() string {
 func (*HeartbeatResponse) ProtoMessage() {}
 
 func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_proto_msgTypes[11]
+	mi := &file_worker_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -971,7 +1112,7 @@ func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatResponse.ProtoReflect.Descriptor instead.
 func (*HeartbeatResponse) Descriptor() ([]byte, []int) {
-	return file_worker_proto_rawDescGZIP(), []int{11}
+	return file_worker_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *HeartbeatResponse) GetOk() bool {
@@ -1000,7 +1141,7 @@ const file_worker_proto_rawDesc = "" +
 	"\x13supported_providers\x18\x03 \x03(\tR\x12supportedProviders\"C\n" +
 	"\vRegisterAck\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\bR\baccepted\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\xbe\x02\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\x86\x04\n" +
 	"\x0eToolDefinition\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12'\n" +
@@ -1012,7 +1153,23 @@ const file_worker_proto_rawDesc = "" +
 	"\tauth_type\x18\a \x01(\tR\bauthType\x12(\n" +
 	"\x10auth_config_json\x18\b \x01(\tR\x0eauthConfigJson\x12\x1f\n" +
 	"\vtimeout_sec\x18\t \x01(\x05R\n" +
-	"timeoutSec\"\xa6\x01\n" +
+	"timeoutSec\x12\x18\n" +
+	"\aversion\x18\n" +
+	" \x01(\tR\aversion\x12\x1a\n" +
+	"\bcategory\x18\v \x01(\tR\bcategory\x12\x1b\n" +
+	"\ttool_type\x18\f \x01(\tR\btoolType\x12,\n" +
+	"\x12output_schema_json\x18\r \x01(\tR\x10outputSchemaJson\x12\x1d\n" +
+	"\n" +
+	"depends_on\x18\x0e \x03(\tR\tdependsOn\x12&\n" +
+	"\x0fmax_chain_depth\x18\x0f \x01(\x05R\rmaxChainDepth\"\xd7\x01\n" +
+	"\vToolContext\x12\x19\n" +
+	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x03 \x01(\tR\tsessionId\x12%\n" +
+	"\x0ecorrelation_id\x18\x04 \x01(\tR\rcorrelationId\x12)\n" +
+	"\x10permissions_json\x18\x05 \x01(\tR\x0fpermissionsJson\x12#\n" +
+	"\rmetadata_json\x18\x06 \x01(\tR\fmetadataJson\"\xa6\x01\n" +
 	"\bToolCall\x12\x1b\n" +
 	"\ttool_name\x18\x01 \x01(\tR\btoolName\x12%\n" +
 	"\x0earguments_json\x18\x02 \x01(\tR\rargumentsJson\x12\x1f\n" +
@@ -1025,7 +1182,7 @@ const file_worker_proto_rawDesc = "" +
 	"Attachment\x12\x1a\n" +
 	"\bfilename\x18\x01 \x01(\tR\bfilename\x12!\n" +
 	"\fcontent_type\x18\x02 \x01(\tR\vcontentType\x12\x18\n" +
-	"\acontent\x18\x03 \x01(\fR\acontent\"\xfa\x03\n" +
+	"\acontent\x18\x03 \x01(\fR\acontent\"\xb5\x04\n" +
 	"\vTaskRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x19\n" +
@@ -1042,7 +1199,8 @@ const file_worker_proto_rawDesc = "" +
 	" \x01(\tR\x11memoryContextJson\x12,\n" +
 	"\x12memory_config_json\x18\v \x01(\tR\x10memoryConfigJson\x12/\n" +
 	"\x05tools\x18\f \x03(\v2\x19.worker.v1.ToolDefinitionR\x05tools\x127\n" +
-	"\vattachments\x18\r \x03(\v2\x15.worker.v1.AttachmentR\vattachments\"\xe8\x02\n" +
+	"\vattachments\x18\r \x03(\v2\x15.worker.v1.AttachmentR\vattachments\x129\n" +
+	"\ftool_context\x18\x0f \x01(\v2\x16.worker.v1.ToolContextR\vtoolContext\"\xe8\x02\n" +
 	"\fTaskResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1b\n" +
@@ -1087,39 +1245,41 @@ func file_worker_proto_rawDescGZIP() []byte {
 	return file_worker_proto_rawDescData
 }
 
-var file_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_worker_proto_goTypes = []any{
 	(*WorkerMessage)(nil),     // 0: worker.v1.WorkerMessage
 	(*ServerMessage)(nil),     // 1: worker.v1.ServerMessage
 	(*RegisterWorker)(nil),    // 2: worker.v1.RegisterWorker
 	(*RegisterAck)(nil),       // 3: worker.v1.RegisterAck
 	(*ToolDefinition)(nil),    // 4: worker.v1.ToolDefinition
-	(*ToolCall)(nil),          // 5: worker.v1.ToolCall
-	(*Attachment)(nil),        // 6: worker.v1.Attachment
-	(*TaskRequest)(nil),       // 7: worker.v1.TaskRequest
-	(*TaskResponse)(nil),      // 8: worker.v1.TaskResponse
-	(*MemoryEntry)(nil),       // 9: worker.v1.MemoryEntry
-	(*HeartbeatRequest)(nil),  // 10: worker.v1.HeartbeatRequest
-	(*HeartbeatResponse)(nil), // 11: worker.v1.HeartbeatResponse
+	(*ToolContext)(nil),       // 5: worker.v1.ToolContext
+	(*ToolCall)(nil),          // 6: worker.v1.ToolCall
+	(*Attachment)(nil),        // 7: worker.v1.Attachment
+	(*TaskRequest)(nil),       // 8: worker.v1.TaskRequest
+	(*TaskResponse)(nil),      // 9: worker.v1.TaskResponse
+	(*MemoryEntry)(nil),       // 10: worker.v1.MemoryEntry
+	(*HeartbeatRequest)(nil),  // 11: worker.v1.HeartbeatRequest
+	(*HeartbeatResponse)(nil), // 12: worker.v1.HeartbeatResponse
 }
 var file_worker_proto_depIdxs = []int32{
 	2,  // 0: worker.v1.WorkerMessage.register:type_name -> worker.v1.RegisterWorker
-	8,  // 1: worker.v1.WorkerMessage.task_response:type_name -> worker.v1.TaskResponse
+	9,  // 1: worker.v1.WorkerMessage.task_response:type_name -> worker.v1.TaskResponse
 	3,  // 2: worker.v1.ServerMessage.register_ack:type_name -> worker.v1.RegisterAck
-	7,  // 3: worker.v1.ServerMessage.task_request:type_name -> worker.v1.TaskRequest
+	8,  // 3: worker.v1.ServerMessage.task_request:type_name -> worker.v1.TaskRequest
 	4,  // 4: worker.v1.TaskRequest.tools:type_name -> worker.v1.ToolDefinition
-	6,  // 5: worker.v1.TaskRequest.attachments:type_name -> worker.v1.Attachment
-	9,  // 6: worker.v1.TaskResponse.new_memories:type_name -> worker.v1.MemoryEntry
-	5,  // 7: worker.v1.TaskResponse.tools_called:type_name -> worker.v1.ToolCall
-	0,  // 8: worker.v1.WorkerService.TaskStream:input_type -> worker.v1.WorkerMessage
-	10, // 9: worker.v1.WorkerService.Heartbeat:input_type -> worker.v1.HeartbeatRequest
-	1,  // 10: worker.v1.WorkerService.TaskStream:output_type -> worker.v1.ServerMessage
-	11, // 11: worker.v1.WorkerService.Heartbeat:output_type -> worker.v1.HeartbeatResponse
-	10, // [10:12] is the sub-list for method output_type
-	8,  // [8:10] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	7,  // 5: worker.v1.TaskRequest.attachments:type_name -> worker.v1.Attachment
+	5,  // 6: worker.v1.TaskRequest.tool_context:type_name -> worker.v1.ToolContext
+	10, // 7: worker.v1.TaskResponse.new_memories:type_name -> worker.v1.MemoryEntry
+	6,  // 8: worker.v1.TaskResponse.tools_called:type_name -> worker.v1.ToolCall
+	0,  // 9: worker.v1.WorkerService.TaskStream:input_type -> worker.v1.WorkerMessage
+	11, // 10: worker.v1.WorkerService.Heartbeat:input_type -> worker.v1.HeartbeatRequest
+	1,  // 11: worker.v1.WorkerService.TaskStream:output_type -> worker.v1.ServerMessage
+	12, // 12: worker.v1.WorkerService.Heartbeat:output_type -> worker.v1.HeartbeatResponse
+	11, // [11:13] is the sub-list for method output_type
+	9,  // [9:11] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_worker_proto_init() }
@@ -1141,7 +1301,7 @@ func file_worker_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_worker_proto_rawDesc), len(file_worker_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -20,16 +20,35 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
 }
 
+const toolColumns = `id, agent_id, tool_name, COALESCE(description,''), COALESCE(parameters,'{}'::jsonb),
+		       COALESCE(endpoint_url,''), COALESCE(http_method,'GET'), COALESCE(headers,'{}'::jsonb),
+		       COALESCE(auth_type,''), COALESCE(auth_config,'{}'::jsonb), COALESCE(is_active,true),
+		       COALESCE(timeout_sec,30), COALESCE(version,'1.0.0'), COALESCE(category,'custom'),
+		       COALESCE(output_schema,'{}'::jsonb), created_at, COALESCE(updated_at, created_at)`
+
+func scanTool(row interface{ Scan(dest ...any) error }) (*ToolDefinition, error) {
+	var t ToolDefinition
+	err := row.Scan(
+		&t.ID, &t.AgentID, &t.Name, &t.Description, &t.Parameters,
+		&t.EndpointURL, &t.HTTPMethod, &t.Headers,
+		&t.AuthType, &t.AuthConfig, &t.IsActive, &t.TimeoutSec,
+		&t.Version, &t.Category, &t.OutputSchema,
+		&t.CreatedAt, &t.UpdatedAt,
+	)
+	return &t, err
+}
+
 // Create inserts a new tool definition.
 func (r *Repository) Create(ctx context.Context, tool *ToolDefinition) error {
 	query := `
-		INSERT INTO agent_tools (id, agent_id, tool_name, description, parameters, endpoint_url, http_method, headers, auth_type, auth_config, is_active, timeout_sec, policy, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, '{}'::jsonb, $13, $14)`
+		INSERT INTO agent_tools (id, agent_id, tool_name, description, parameters, endpoint_url, http_method, headers, auth_type, auth_config, is_active, timeout_sec, version, category, output_schema, policy, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, '{}'::jsonb, $16, $17)`
 
 	_, err := r.pool.Exec(ctx, query,
 		tool.ID, tool.AgentID, tool.Name, tool.Description,
 		tool.Parameters, tool.EndpointURL, tool.HTTPMethod, tool.Headers,
 		tool.AuthType, tool.AuthConfig, tool.IsActive, tool.TimeoutSec,
+		tool.Version, tool.Category, tool.OutputSchema,
 		tool.CreatedAt, tool.UpdatedAt,
 	)
 	if err != nil {
@@ -40,37 +59,21 @@ func (r *Repository) Create(ctx context.Context, tool *ToolDefinition) error {
 
 // GetByID retrieves a tool definition by ID.
 func (r *Repository) GetByID(ctx context.Context, toolID uuid.UUID) (*ToolDefinition, error) {
-	query := `
-		SELECT id, agent_id, tool_name, COALESCE(description,''), COALESCE(parameters,'{}'::jsonb),
-		       COALESCE(endpoint_url,''), COALESCE(http_method,'GET'), COALESCE(headers,'{}'::jsonb),
-		       COALESCE(auth_type,''), COALESCE(auth_config,'{}'::jsonb), COALESCE(is_active,true),
-		       COALESCE(timeout_sec,30), created_at, COALESCE(updated_at, created_at)
-		FROM agent_tools WHERE id = $1`
+	query := `SELECT ` + toolColumns + ` FROM agent_tools WHERE id = $1`
 
-	var t ToolDefinition
-	err := r.pool.QueryRow(ctx, query, toolID).Scan(
-		&t.ID, &t.AgentID, &t.Name, &t.Description, &t.Parameters,
-		&t.EndpointURL, &t.HTTPMethod, &t.Headers,
-		&t.AuthType, &t.AuthConfig, &t.IsActive, &t.TimeoutSec,
-		&t.CreatedAt, &t.UpdatedAt,
-	)
+	t, err := scanTool(r.pool.QueryRow(ctx, query, toolID))
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("getting tool by ID: %w", err)
 	}
-	return &t, nil
+	return t, nil
 }
 
 // ListByAgent retrieves all tools for a given agent.
 func (r *Repository) ListByAgent(ctx context.Context, agentID uuid.UUID) ([]*ToolDefinition, error) {
-	query := `
-		SELECT id, agent_id, tool_name, COALESCE(description,''), COALESCE(parameters,'{}'::jsonb),
-		       COALESCE(endpoint_url,''), COALESCE(http_method,'GET'), COALESCE(headers,'{}'::jsonb),
-		       COALESCE(auth_type,''), COALESCE(auth_config,'{}'::jsonb), COALESCE(is_active,true),
-		       COALESCE(timeout_sec,30), created_at, COALESCE(updated_at, created_at)
-		FROM agent_tools WHERE agent_id = $1 ORDER BY created_at`
+	query := `SELECT ` + toolColumns + ` FROM agent_tools WHERE agent_id = $1 ORDER BY created_at`
 
 	rows, err := r.pool.Query(ctx, query, agentID)
 	if err != nil {
@@ -80,28 +83,18 @@ func (r *Repository) ListByAgent(ctx context.Context, agentID uuid.UUID) ([]*Too
 
 	var tools []*ToolDefinition
 	for rows.Next() {
-		var t ToolDefinition
-		if err := rows.Scan(
-			&t.ID, &t.AgentID, &t.Name, &t.Description, &t.Parameters,
-			&t.EndpointURL, &t.HTTPMethod, &t.Headers,
-			&t.AuthType, &t.AuthConfig, &t.IsActive, &t.TimeoutSec,
-			&t.CreatedAt, &t.UpdatedAt,
-		); err != nil {
+		t, err := scanTool(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scanning tool: %w", err)
 		}
-		tools = append(tools, &t)
+		tools = append(tools, t)
 	}
 	return tools, nil
 }
 
 // ListActiveByAgent retrieves only active tools for a given agent.
 func (r *Repository) ListActiveByAgent(ctx context.Context, agentID uuid.UUID) ([]*ToolDefinition, error) {
-	query := `
-		SELECT id, agent_id, tool_name, COALESCE(description,''), COALESCE(parameters,'{}'::jsonb),
-		       COALESCE(endpoint_url,''), COALESCE(http_method,'GET'), COALESCE(headers,'{}'::jsonb),
-		       COALESCE(auth_type,''), COALESCE(auth_config,'{}'::jsonb), is_active,
-		       COALESCE(timeout_sec,30), created_at, COALESCE(updated_at, created_at)
-		FROM agent_tools WHERE agent_id = $1 AND is_active = true ORDER BY created_at`
+	query := `SELECT ` + toolColumns + ` FROM agent_tools WHERE agent_id = $1 AND is_active = true ORDER BY created_at`
 
 	rows, err := r.pool.Query(ctx, query, agentID)
 	if err != nil {
@@ -111,16 +104,11 @@ func (r *Repository) ListActiveByAgent(ctx context.Context, agentID uuid.UUID) (
 
 	var tools []*ToolDefinition
 	for rows.Next() {
-		var t ToolDefinition
-		if err := rows.Scan(
-			&t.ID, &t.AgentID, &t.Name, &t.Description, &t.Parameters,
-			&t.EndpointURL, &t.HTTPMethod, &t.Headers,
-			&t.AuthType, &t.AuthConfig, &t.IsActive, &t.TimeoutSec,
-			&t.CreatedAt, &t.UpdatedAt,
-		); err != nil {
+		t, err := scanTool(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scanning tool: %w", err)
 		}
-		tools = append(tools, &t)
+		tools = append(tools, t)
 	}
 	return tools, nil
 }
@@ -132,13 +120,15 @@ func (r *Repository) Update(ctx context.Context, tool *ToolDefinition) error {
 			tool_name = $2, description = $3, parameters = $4,
 			endpoint_url = $5, http_method = $6, headers = $7,
 			auth_type = $8, auth_config = $9, is_active = $10,
-			timeout_sec = $11, updated_at = $12
+			timeout_sec = $11, version = $12, category = $13,
+			output_schema = $14, updated_at = $15
 		WHERE id = $1`
 
 	_, err := r.pool.Exec(ctx, query,
 		tool.ID, tool.Name, tool.Description, tool.Parameters,
 		tool.EndpointURL, tool.HTTPMethod, tool.Headers,
 		tool.AuthType, tool.AuthConfig, tool.IsActive, tool.TimeoutSec,
+		tool.Version, tool.Category, tool.OutputSchema,
 		tool.UpdatedAt,
 	)
 	if err != nil {

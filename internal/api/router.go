@@ -56,20 +56,20 @@ type HandlerSet struct {
 	WSUpgrade http.HandlerFunc
 
 	// Organization handlers (Phase 9)
-	CreateOrg          http.HandlerFunc
-	ListOrgs           http.HandlerFunc
-	GetOrg             http.HandlerFunc
-	UpdateOrg          http.HandlerFunc
-	DeleteOrg          http.HandlerFunc
-	ListOrgMembers     http.HandlerFunc
-	UpdateMemberRole   http.HandlerFunc
-	RemoveOrgMember    http.HandlerFunc
-	CreateOrgInvite    http.HandlerFunc
-	ListOrgInvites     http.HandlerFunc
-	DeleteOrgInvite    http.HandlerFunc
-	AcceptInvite       http.HandlerFunc
-	ListOrgAgents      http.HandlerFunc
-	CreateOrgAgent     http.HandlerFunc
+	CreateOrg           http.HandlerFunc
+	ListOrgs            http.HandlerFunc
+	GetOrg              http.HandlerFunc
+	UpdateOrg           http.HandlerFunc
+	DeleteOrg           http.HandlerFunc
+	ListOrgMembers      http.HandlerFunc
+	UpdateMemberRole    http.HandlerFunc
+	RemoveOrgMember     http.HandlerFunc
+	CreateOrgInvite     http.HandlerFunc
+	ListOrgInvites      http.HandlerFunc
+	DeleteOrgInvite     http.HandlerFunc
+	AcceptInvite        http.HandlerFunc
+	ListOrgAgents       http.HandlerFunc
+	CreateOrgAgent      http.HandlerFunc
 	OrgMemberMiddleware func(http.Handler) http.Handler
 	OrgAdminMiddleware  func(http.Handler) http.Handler
 	OrgOwnerMiddleware  func(http.Handler) http.Handler
@@ -97,6 +97,23 @@ type HandlerSet struct {
 	GetAttachment      http.HandlerFunc
 	DownloadAttachment http.HandlerFunc
 	DeleteAttachment   http.HandlerFunc
+
+	// System tool handlers (Phase 12 - Admin)
+	CreateSystemTool http.HandlerFunc
+	ListSystemTools  http.HandlerFunc
+	GetSystemTool    http.HandlerFunc
+	UpdateSystemTool http.HandlerFunc
+	DeleteSystemTool http.HandlerFunc
+
+	// Plugin handlers (Phase 12)
+	RegisterPlugin http.HandlerFunc
+	ListPlugins    http.HandlerFunc
+	DeletePlugin   http.HandlerFunc
+	SyncPlugin     http.HandlerFunc
+
+	// MCP handlers (Phase 12)
+	ExportMCPTools http.HandlerFunc
+	ImportMCPTools http.HandlerFunc
 
 	// Auth middleware
 	AuthMiddleware func(http.Handler) http.Handler
@@ -224,6 +241,14 @@ func NewRouter(pool *pgxpool.Pool, natsClient *inats.Client, cfg RouterConfig, h
 							r.Get("/{toolID}", h.GetTool)
 							r.Put("/{toolID}", h.UpdateTool)
 							r.Delete("/{toolID}", h.DeleteTool)
+
+							// MCP routes (Phase 12)
+							if h.ExportMCPTools != nil {
+								r.Get("/mcp", h.ExportMCPTools)
+							}
+							if h.ImportMCPTools != nil {
+								r.Post("/import", h.ImportMCPTools)
+							}
 						})
 					}
 
@@ -324,6 +349,27 @@ func NewRouter(pool *pgxpool.Pool, natsClient *inats.Client, cfg RouterConfig, h
 
 				// Invite acceptance (outside org routes — user just needs auth)
 				r.Post("/invites/{token}/accept", h.AcceptInvite)
+			}
+
+			// Admin routes — system tools (Phase 12)
+			if h.CreateSystemTool != nil {
+				r.Route("/admin/tools", func(r chi.Router) {
+					r.Post("/", h.CreateSystemTool)
+					r.Get("/", h.ListSystemTools)
+					r.Get("/{toolID}", h.GetSystemTool)
+					r.Put("/{toolID}", h.UpdateSystemTool)
+					r.Delete("/{toolID}", h.DeleteSystemTool)
+				})
+			}
+
+			// Plugin routes (Phase 12)
+			if h.RegisterPlugin != nil {
+				r.Route("/plugins", func(r chi.Router) {
+					r.Post("/register", h.RegisterPlugin)
+					r.Get("/", h.ListPlugins)
+					r.Delete("/{pluginID}", h.DeletePlugin)
+					r.Post("/{pluginID}/sync", h.SyncPlugin)
+				})
 			}
 		})
 	})
