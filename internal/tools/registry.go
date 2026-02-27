@@ -3,8 +3,11 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 
 	"github.com/google/uuid"
+
+	"github.com/aiox-platform/aiox/internal/auth"
 )
 
 // ResolvedTool represents a tool resolved from either system or agent scope.
@@ -31,14 +34,51 @@ type ResolvedTool struct {
 type Registry struct {
 	systemSvc *SystemService
 	agentSvc  *Service
+	encryptor *auth.Encryptor
 }
 
 // NewRegistry creates a new tool registry.
-func NewRegistry(systemSvc *SystemService, agentSvc *Service) *Registry {
+func NewRegistry(systemSvc *SystemService, agentSvc *Service, encryptionKey string) *Registry {
+	var enc *auth.Encryptor
+	if encryptionKey != "" {
+		enc, _ = auth.NewEncryptor(encryptionKey)
+	}
 	return &Registry{
 		systemSvc: systemSvc,
 		agentSvc:  agentSvc,
+		encryptor: enc,
 	}
+}
+
+// decryptAuthConfig attempts to decrypt an encrypted auth_config value.
+// Encrypted values are stored as a JSON string: `"<hex>"`.
+// Decrypted values are the original JSON object: `{"key":"..."}`.
+func (r *Registry) decryptAuthConfig(raw json.RawMessage) json.RawMessage {
+	if r.encryptor == nil || len(raw) <= 2 {
+		return raw
+	}
+
+	// Encrypted auth_config is stored as a JSON string: "\"<hex>\""
+	// First, try to unmarshal as a string (which is the encrypted form).
+	var encrypted string
+	if err := json.Unmarshal(raw, &encrypted); err != nil {
+		// Not a JSON string — already a plain JSON object, return as-is
+		return raw
+	}
+
+	// If it's an empty string, return empty object
+	if encrypted == "" {
+		return json.RawMessage(`{}`)
+	}
+
+	// Attempt decryption
+	decrypted, err := r.encryptor.Decrypt(encrypted)
+	if err != nil {
+		slog.Warn("registry: failed to decrypt auth_config, returning as-is", "error", err)
+		return raw
+	}
+
+	return json.RawMessage(decrypted)
 }
 
 // GetToolsForAgent returns all tools available to an agent, merging system and agent tools.
@@ -63,7 +103,7 @@ func (r *Registry) GetToolsForAgent(ctx context.Context, agentID uuid.UUID) ([]*
 				HTTPMethod:   st.HTTPMethod,
 				Headers:      st.Headers,
 				AuthType:     st.AuthType,
-				AuthConfig:   st.AuthConfig,
+				AuthConfig:   r.decryptAuthConfig(st.AuthConfig),
 				IsActive:     st.IsActive,
 				TimeoutSec:   st.TimeoutSec,
 				Version:      st.Version,
@@ -92,7 +132,7 @@ func (r *Registry) GetToolsForAgent(ctx context.Context, agentID uuid.UUID) ([]*
 				HTTPMethod:   at.HTTPMethod,
 				Headers:      at.Headers,
 				AuthType:     at.AuthType,
-				AuthConfig:   at.AuthConfig,
+				AuthConfig:   r.decryptAuthConfig(at.AuthConfig),
 				IsActive:     at.IsActive,
 				TimeoutSec:   at.TimeoutSec,
 				Version:      at.Version,
@@ -133,7 +173,7 @@ func (r *Registry) GetSystemTools(ctx context.Context) ([]*ResolvedTool, error) 
 			HTTPMethod:   st.HTTPMethod,
 			Headers:      st.Headers,
 			AuthType:     st.AuthType,
-			AuthConfig:   st.AuthConfig,
+			AuthConfig:   r.decryptAuthConfig(st.AuthConfig),
 			IsActive:     st.IsActive,
 			TimeoutSec:   st.TimeoutSec,
 			Version:      st.Version,

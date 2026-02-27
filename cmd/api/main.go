@@ -184,7 +184,7 @@ func main() {
 	systemToolsHandler := tools.NewSystemHandler(systemToolsSvc)
 
 	// Tool registry (Phase 12) — merges system + agent tools
-	toolsRegistry := tools.NewRegistry(systemToolsSvc, toolsSvc)
+	toolsRegistry := tools.NewRegistry(systemToolsSvc, toolsSvc, cfg.Encryption.Key)
 
 	// MCP handler (Phase 12)
 	mcpHandler := tools.NewMCPHandler(toolsSvc)

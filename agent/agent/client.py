@@ -228,7 +228,28 @@ class WorkerClient:
             tools_for_llm = None
             tool_executor = None
             if task_req.tools:
-                tool_executor = ToolExecutor()
+                # Build tool context from proto ToolContext
+                tool_ctx = {}
+                if task_req.tool_context:
+                    tc = task_req.tool_context
+                    tool_ctx = {
+                        "agent_id": tc.agent_id,
+                        "user_id": tc.user_id,
+                        "session_id": tc.session_id,
+                        "correlation_id": tc.correlation_id,
+                    }
+                    if tc.permissions_json:
+                        try:
+                            tool_ctx["permissions"] = json.loads(tc.permissions_json)
+                        except json.JSONDecodeError:
+                            pass
+                    if tc.metadata_json:
+                        try:
+                            tool_ctx["metadata"] = json.loads(tc.metadata_json)
+                        except json.JSONDecodeError:
+                            pass
+
+                tool_executor = ToolExecutor(tool_context=tool_ctx)
                 # All providers receive OpenAI-formatted tools with private execution
                 # metadata (_endpoint_url, _http_method, etc.). Each provider converts
                 # to its own API format internally before calling the LLM.

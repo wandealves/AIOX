@@ -42,6 +42,8 @@ class ToolExecutor(Protocol):
         auth_type: str,
         auth_config: dict | None,
         timeout_sec: int,
+        tool_type: str = "http",
+        tool_name: str = "",
     ) -> dict: ...
 
 
@@ -112,6 +114,17 @@ def _append_attachments(messages: list[dict], attachments: list[dict]) -> None:
     messages[last_user_idx] = {"role": "user", "content": parts}
 
 
+def _apply_parameter_defaults(tool_def: dict, arguments: dict) -> dict:
+    """Fill in missing arguments with default values from the tool's parameter schema."""
+    params = tool_def.get("function", {}).get("parameters", {})
+    properties = params.get("properties", {})
+    merged = dict(arguments)
+    for key, schema in properties.items():
+        if key not in merged and "default" in schema:
+            merged[key] = schema["default"]
+    return merged
+
+
 async def _execute_tool(
     tool_executor: ToolExecutor,
     tool_def: dict,
@@ -120,6 +133,7 @@ async def _execute_tool(
     args_json: str,
 ) -> ToolCallResult:
     """Execute a single tool call via the tool executor and return a ToolCallResult."""
+    arguments = _apply_parameter_defaults(tool_def, arguments)
     exec_result = await tool_executor.execute(
         endpoint_url=tool_def.get("_endpoint_url", ""),
         http_method=tool_def.get("_http_method", "POST"),
@@ -128,6 +142,8 @@ async def _execute_tool(
         auth_type=tool_def.get("_auth_type", ""),
         auth_config=tool_def.get("_auth_config"),
         timeout_sec=tool_def.get("_timeout_sec", 30),
+        tool_type=tool_def.get("_tool_type", "http"),
+        tool_name=tool_def.get("_tool_name", tool_name),
     )
     return ToolCallResult(
         tool_name=tool_name,

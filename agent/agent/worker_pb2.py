@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0cworker.proto\x12\tworker.v1\"{\n\rWorkerMessage\x12-\n\x08register\x18\x01 \x01(\x0b\x32\x19.worker.v1.RegisterWorkerH\x00\x12\x30\n\rtask_response\x18\x02 \x01(\x0b\x32\x17.worker.v1.TaskResponseH\x00\x42\t\n\x07payload\"z\n\rServerMessage\x12.\n\x0cregister_ack\x18\x01 \x01(\x0b\x32\x16.worker.v1.RegisterAckH\x00\x12.\n\x0ctask_request\x18\x02 \x01(\x0b\x32\x16.worker.v1.TaskRequestH\x00\x42\t\n\x07payload\"X\n\x0eRegisterWorker\x12\x11\n\tworker_id\x18\x01 \x01(\t\x12\x16\n\x0emax_concurrent\x18\x02 \x01(\x05\x12\x1b\n\x13supported_providers\x18\x03 \x03(\t\"0\n\x0bRegisterAck\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\"\xcf\x01\n\x0eToolDefinition\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x02 \x01(\t\x12\x17\n\x0fparameters_json\x18\x03 \x01(\t\x12\x14\n\x0c\x65ndpoint_url\x18\x04 \x01(\t\x12\x13\n\x0bhttp_method\x18\x05 \x01(\t\x12\x14\n\x0cheaders_json\x18\x06 \x01(\t\x12\x11\n\tauth_type\x18\x07 \x01(\t\x12\x18\n\x10\x61uth_config_json\x18\x08 \x01(\t\x12\x13\n\x0btimeout_sec\x18\t \x01(\x05\"n\n\x08ToolCall\x12\x11\n\ttool_name\x18\x01 \x01(\t\x12\x16\n\x0e\x61rguments_json\x18\x02 \x01(\t\x12\x13\n\x0bresult_json\x18\x03 \x01(\t\x12\x13\n\x0b\x64uration_ms\x18\x04 \x01(\x05\x12\r\n\x05\x65rror\x18\x05 \x01(\t\"E\n\nAttachment\x12\x10\n\x08\x66ilename\x18\x01 \x01(\t\x12\x14\n\x0c\x63ontent_type\x18\x02 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x03 \x01(\x0c\"\xd8\x02\n\x0bTaskRequest\x12\x12\n\nrequest_id\x18\x01 \x01(\t\x12\x10\n\x08\x61gent_id\x18\x02 \x01(\t\x12\x15\n\rowner_user_id\x18\x03 \x01(\t\x12\x14\n\x0cuser_message\x18\x04 \x01(\t\x12\x15\n\rsystem_prompt\x18\x05 \x01(\t\x12\x17\n\x0fllm_config_json\x18\x06 \x01(\t\x12\x10\n\x08\x66rom_jid\x18\x07 \x01(\t\x12\x11\n\tagent_jid\x18\x08 \x01(\t\x12\x12\n\nagent_name\x18\t \x01(\t\x12\x1b\n\x13memory_context_json\x18\n \x01(\t\x12\x1a\n\x12memory_config_json\x18\x0b \x01(\t\x12(\n\x05tools\x18\x0c \x03(\x0b\x32\x19.worker.v1.ToolDefinition\x12*\n\x0b\x61ttachments\x18\r \x03(\x0b\x32\x15.worker.v1.Attachment\"\xfa\x01\n\x0cTaskResponse\x12\x12\n\nrequest_id\x18\x01 \x01(\t\x12\x11\n\tworker_id\x18\x02 \x01(\t\x12\x15\n\rresponse_text\x18\x03 \x01(\t\x12\x13\n\x0btokens_used\x18\x04 \x01(\x05\x12\x13\n\x0b\x64uration_ms\x18\x05 \x01(\x05\x12\x12\n\nmodel_used\x18\x06 \x01(\t\x12\x15\n\rerror_message\x18\x07 \x01(\t\x12,\n\x0cnew_memories\x18\x08 \x03(\x0b\x32\x16.worker.v1.MemoryEntry\x12)\n\x0ctools_called\x18\t \x03(\x0b\x32\x13.worker.v1.ToolCall\"]\n\x0bMemoryEntry\x12\x0f\n\x07\x63ontent\x18\x01 \x01(\t\x12\x11\n\tembedding\x18\x02 \x03(\x02\x12\x13\n\x0bmemory_type\x18\x03 \x01(\t\x12\x15\n\rmetadata_json\x18\x04 \x01(\t\"l\n\x10HeartbeatRequest\x12\x11\n\tworker_id\x18\x01 \x01(\t\x12\x14\n\x0c\x61\x63tive_tasks\x18\x02 \x01(\x05\x12\x17\n\x0fmemory_usage_mb\x18\x03 \x01(\x05\x12\x16\n\x0e\x61vg_latency_ms\x18\x04 \x01(\x05\"\x1f\n\x11HeartbeatResponse\x12\n\n\x02ok\x18\x01 \x01(\x08\x32\x9d\x01\n\rWorkerService\x12\x44\n\nTaskStream\x12\x18.worker.v1.WorkerMessage\x1a\x18.worker.v1.ServerMessage(\x01\x30\x01\x12\x46\n\tHeartbeat\x12\x1b.worker.v1.HeartbeatRequest\x1a\x1c.worker.v1.HeartbeatResponseB8Z6github.com/aiox-platform/aiox/internal/worker/workerpbb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0cworker.proto\x12\tworker.v1\"{\n\rWorkerMessage\x12-\n\x08register\x18\x01 \x01(\x0b\x32\x19.worker.v1.RegisterWorkerH\x00\x12\x30\n\rtask_response\x18\x02 \x01(\x0b\x32\x17.worker.v1.TaskResponseH\x00\x42\t\n\x07payload\"z\n\rServerMessage\x12.\n\x0cregister_ack\x18\x01 \x01(\x0b\x32\x16.worker.v1.RegisterAckH\x00\x12.\n\x0ctask_request\x18\x02 \x01(\x0b\x32\x16.worker.v1.TaskRequestH\x00\x42\t\n\x07payload\"X\n\x0eRegisterWorker\x12\x11\n\tworker_id\x18\x01 \x01(\t\x12\x16\n\x0emax_concurrent\x18\x02 \x01(\x05\x12\x1b\n\x13supported_providers\x18\x03 \x03(\t\"0\n\x0bRegisterAck\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\"\xce\x02\n\x0eToolDefinition\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x02 \x01(\t\x12\x17\n\x0fparameters_json\x18\x03 \x01(\t\x12\x14\n\x0c\x65ndpoint_url\x18\x04 \x01(\t\x12\x13\n\x0bhttp_method\x18\x05 \x01(\t\x12\x14\n\x0cheaders_json\x18\x06 \x01(\t\x12\x11\n\tauth_type\x18\x07 \x01(\t\x12\x18\n\x10\x61uth_config_json\x18\x08 \x01(\t\x12\x13\n\x0btimeout_sec\x18\t \x01(\x05\x12\x0f\n\x07version\x18\n \x01(\t\x12\x10\n\x08\x63\x61tegory\x18\x0b \x01(\t\x12\x11\n\ttool_type\x18\x0c \x01(\t\x12\x1a\n\x12output_schema_json\x18\r \x01(\t\x12\x12\n\ndepends_on\x18\x0e \x03(\t\x12\x17\n\x0fmax_chain_depth\x18\x0f \x01(\x05\"\x8d\x01\n\x0bToolContext\x12\x10\n\x08\x61gent_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x12\n\nsession_id\x18\x03 \x01(\t\x12\x16\n\x0e\x63orrelation_id\x18\x04 \x01(\t\x12\x18\n\x10permissions_json\x18\x05 \x01(\t\x12\x15\n\rmetadata_json\x18\x06 \x01(\t\"n\n\x08ToolCall\x12\x11\n\ttool_name\x18\x01 \x01(\t\x12\x16\n\x0e\x61rguments_json\x18\x02 \x01(\t\x12\x13\n\x0bresult_json\x18\x03 \x01(\t\x12\x13\n\x0b\x64uration_ms\x18\x04 \x01(\x05\x12\r\n\x05\x65rror\x18\x05 \x01(\t\"E\n\nAttachment\x12\x10\n\x08\x66ilename\x18\x01 \x01(\t\x12\x14\n\x0c\x63ontent_type\x18\x02 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x03 \x01(\x0c\"\x86\x03\n\x0bTaskRequest\x12\x12\n\nrequest_id\x18\x01 \x01(\t\x12\x10\n\x08\x61gent_id\x18\x02 \x01(\t\x12\x15\n\rowner_user_id\x18\x03 \x01(\t\x12\x14\n\x0cuser_message\x18\x04 \x01(\t\x12\x15\n\rsystem_prompt\x18\x05 \x01(\t\x12\x17\n\x0fllm_config_json\x18\x06 \x01(\t\x12\x10\n\x08\x66rom_jid\x18\x07 \x01(\t\x12\x11\n\tagent_jid\x18\x08 \x01(\t\x12\x12\n\nagent_name\x18\t \x01(\t\x12\x1b\n\x13memory_context_json\x18\n \x01(\t\x12\x1a\n\x12memory_config_json\x18\x0b \x01(\t\x12(\n\x05tools\x18\x0c \x03(\x0b\x32\x19.worker.v1.ToolDefinition\x12*\n\x0b\x61ttachments\x18\r \x03(\x0b\x32\x15.worker.v1.Attachment\x12,\n\x0ctool_context\x18\x0f \x01(\x0b\x32\x16.worker.v1.ToolContext\"\xfa\x01\n\x0cTaskResponse\x12\x12\n\nrequest_id\x18\x01 \x01(\t\x12\x11\n\tworker_id\x18\x02 \x01(\t\x12\x15\n\rresponse_text\x18\x03 \x01(\t\x12\x13\n\x0btokens_used\x18\x04 \x01(\x05\x12\x13\n\x0b\x64uration_ms\x18\x05 \x01(\x05\x12\x12\n\nmodel_used\x18\x06 \x01(\t\x12\x15\n\rerror_message\x18\x07 \x01(\t\x12,\n\x0cnew_memories\x18\x08 \x03(\x0b\x32\x16.worker.v1.MemoryEntry\x12)\n\x0ctools_called\x18\t \x03(\x0b\x32\x13.worker.v1.ToolCall\"]\n\x0bMemoryEntry\x12\x0f\n\x07\x63ontent\x18\x01 \x01(\t\x12\x11\n\tembedding\x18\x02 \x03(\x02\x12\x13\n\x0bmemory_type\x18\x03 \x01(\t\x12\x15\n\rmetadata_json\x18\x04 \x01(\t\"l\n\x10HeartbeatRequest\x12\x11\n\tworker_id\x18\x01 \x01(\t\x12\x14\n\x0c\x61\x63tive_tasks\x18\x02 \x01(\x05\x12\x17\n\x0fmemory_usage_mb\x18\x03 \x01(\x05\x12\x16\n\x0e\x61vg_latency_ms\x18\x04 \x01(\x05\"\x1f\n\x11HeartbeatResponse\x12\n\n\x02ok\x18\x01 \x01(\x08\x32\x9d\x01\n\rWorkerService\x12\x44\n\nTaskStream\x12\x18.worker.v1.WorkerMessage\x1a\x18.worker.v1.ServerMessage(\x01\x30\x01\x12\x46\n\tHeartbeat\x12\x1b.worker.v1.HeartbeatRequest\x1a\x1c.worker.v1.HeartbeatResponseB8Z6github.com/aiox-platform/aiox/internal/worker/workerpbb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -41,21 +41,23 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_REGISTERACK']._serialized_start=366
   _globals['_REGISTERACK']._serialized_end=414
   _globals['_TOOLDEFINITION']._serialized_start=417
-  _globals['_TOOLDEFINITION']._serialized_end=624
-  _globals['_TOOLCALL']._serialized_start=626
-  _globals['_TOOLCALL']._serialized_end=736
-  _globals['_ATTACHMENT']._serialized_start=738
-  _globals['_ATTACHMENT']._serialized_end=807
-  _globals['_TASKREQUEST']._serialized_start=810
-  _globals['_TASKREQUEST']._serialized_end=1154
-  _globals['_TASKRESPONSE']._serialized_start=1157
-  _globals['_TASKRESPONSE']._serialized_end=1407
-  _globals['_MEMORYENTRY']._serialized_start=1409
-  _globals['_MEMORYENTRY']._serialized_end=1502
-  _globals['_HEARTBEATREQUEST']._serialized_start=1504
-  _globals['_HEARTBEATREQUEST']._serialized_end=1612
-  _globals['_HEARTBEATRESPONSE']._serialized_start=1614
-  _globals['_HEARTBEATRESPONSE']._serialized_end=1645
-  _globals['_WORKERSERVICE']._serialized_start=1648
-  _globals['_WORKERSERVICE']._serialized_end=1805
+  _globals['_TOOLDEFINITION']._serialized_end=751
+  _globals['_TOOLCONTEXT']._serialized_start=754
+  _globals['_TOOLCONTEXT']._serialized_end=895
+  _globals['_TOOLCALL']._serialized_start=897
+  _globals['_TOOLCALL']._serialized_end=1007
+  _globals['_ATTACHMENT']._serialized_start=1009
+  _globals['_ATTACHMENT']._serialized_end=1078
+  _globals['_TASKREQUEST']._serialized_start=1081
+  _globals['_TASKREQUEST']._serialized_end=1471
+  _globals['_TASKRESPONSE']._serialized_start=1474
+  _globals['_TASKRESPONSE']._serialized_end=1724
+  _globals['_MEMORYENTRY']._serialized_start=1726
+  _globals['_MEMORYENTRY']._serialized_end=1819
+  _globals['_HEARTBEATREQUEST']._serialized_start=1821
+  _globals['_HEARTBEATREQUEST']._serialized_end=1929
+  _globals['_HEARTBEATRESPONSE']._serialized_start=1931
+  _globals['_HEARTBEATRESPONSE']._serialized_end=1962
+  _globals['_WORKERSERVICE']._serialized_start=1965
+  _globals['_WORKERSERVICE']._serialized_end=2122
 # @@protoc_insertion_point(module_scope)

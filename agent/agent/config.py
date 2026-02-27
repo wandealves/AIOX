@@ -23,6 +23,9 @@ class Config:
         self.ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
         self.ollama_default_model = os.getenv("OLLAMA_DEFAULT_MODEL", "llama3.2")
 
+        # Tool API keys
+        self.tavily_api_key = os.getenv("TAVILY_API_KEY", "")
+
         # Tracing
         self.tracing_enabled = os.getenv("TRACING_ENABLED", "").lower() in ("true", "1")
         self.tracing_otlp_endpoint = os.getenv(
