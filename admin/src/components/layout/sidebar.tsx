@@ -16,6 +16,8 @@ import {
   FileText,
   Users,
   BarChart3,
+  Wrench,
+  Puzzle,
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -33,6 +35,8 @@ const navItems = [
 const adminItems = [
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/stats", label: "Statistics", icon: BarChart3 },
+  { href: "/admin/system-tools", label: "System Tools", icon: Wrench },
+  { href: "/admin/plugins", label: "Plugins", icon: Puzzle },
 ];
 
 interface SidebarContextValue {

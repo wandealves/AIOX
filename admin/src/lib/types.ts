@@ -172,8 +172,87 @@ export interface ToolDefinition {
   auth_config: Record<string, unknown> | null;
   is_active: boolean;
   timeout_sec: number;
+  version?: string;
+  category?: string;
+  output_schema?: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
+}
+
+// System Tools (global)
+export interface SystemTool {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  parameters: Record<string, unknown> | null;
+  output_schema: Record<string, unknown> | null;
+  tool_type: string;
+  endpoint_url: string;
+  http_method: string;
+  headers: Record<string, string> | null;
+  auth_type: string;
+  auth_config: Record<string, unknown> | null;
+  is_active: boolean;
+  timeout_sec: number;
+  version: string;
+  plugin_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateSystemToolRequest {
+  name: string;
+  description: string;
+  category: string;
+  parameters?: Record<string, unknown>;
+  output_schema?: Record<string, unknown>;
+  tool_type: string;
+  endpoint_url?: string;
+  http_method?: string;
+  headers?: Record<string, string>;
+  auth_type?: string;
+  auth_config?: Record<string, unknown>;
+  timeout_sec?: number;
+  version?: string;
+}
+
+export interface UpdateSystemToolRequest {
+  name?: string;
+  description?: string;
+  category?: string;
+  parameters?: Record<string, unknown>;
+  output_schema?: Record<string, unknown>;
+  tool_type?: string;
+  endpoint_url?: string;
+  http_method?: string;
+  headers?: Record<string, string>;
+  auth_type?: string;
+  auth_config?: Record<string, unknown>;
+  is_active?: boolean;
+  timeout_sec?: number;
+  version?: string;
+}
+
+// Plugins
+export interface Plugin {
+  id: string;
+  name: string;
+  description: string;
+  manifest_url: string;
+  is_active: boolean;
+  auto_sync: boolean;
+  last_synced_at?: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RegisterPluginRequest {
+  name: string;
+  description: string;
+  manifest_url: string;
+  auto_sync?: boolean;
 }
 
 export interface CreateToolRequest {

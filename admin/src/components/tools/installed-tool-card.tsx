@@ -13,6 +13,7 @@ import type { ToolDefinition } from "@/lib/types";
 interface InstalledToolCardProps {
   tool: ToolDefinition;
   index?: number;
+  source?: "system" | "agent";
   onEdit?: (tool: ToolDefinition) => void;
   onDelete?: (tool: ToolDefinition) => void;
   onToggleActive?: (tool: ToolDefinition) => void;
@@ -29,6 +30,7 @@ const methodColors: Record<string, string> = {
 export function InstalledToolCard({
   tool,
   index = 0,
+  source,
   onEdit,
   onDelete,
   onToggleActive,
@@ -64,9 +66,16 @@ export function InstalledToolCard({
               {Icon && <Icon className={`h-5 w-5 ${colors.text}`} />}
             </div>
             <div>
-              <h3 className="font-semibold text-[var(--foreground)]">
-                {matchedTemplate?.name || tool.name}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-[var(--foreground)]">
+                  {matchedTemplate?.name || tool.name}
+                </h3>
+                {source === "system" && (
+                  <span className="inline-flex items-center rounded-full bg-purple-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-purple-600">
+                    Global
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-2">
                 <span
                   className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
@@ -121,7 +130,7 @@ export function InstalledToolCard({
               Edit
             </button>
           )}
-          {onDelete && (
+          {onDelete && source !== "system" && (
             <button
               onClick={() => onDelete(tool)}
               className="ml-auto flex items-center justify-center rounded-lg p-1.5 text-[var(--foreground-subtle)] transition-colors hover:bg-red-500/10 hover:text-red-500"
