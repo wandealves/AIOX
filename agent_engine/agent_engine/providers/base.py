@@ -26,6 +26,7 @@ class LLMResponse:
     model_used: str
     duration_ms: int
     error: str = ""
+    error_type: str = ""
     tools_called: list[ToolCallResult] = field(default_factory=list)
 
 
@@ -98,19 +99,27 @@ def _append_attachments(messages: list[dict], attachments: list[dict]) -> None:
 
     content = messages[last_user_idx]["content"]
     parts: list[dict] = (
-        [{"type": "text", "text": content}] if isinstance(content, str) else list(content)
+        [{"type": "text", "text": content}]
+        if isinstance(content, str)
+        else list(content)
     )
     for att in attachments:
         if att["type"] == "image":
-            parts.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:{att['content_type']};base64,{att['data_b64']}"},
-            })
+            parts.append(
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:{att['content_type']};base64,{att['data_b64']}"
+                    },
+                }
+            )
         else:
-            parts.append({
-                "type": "text",
-                "text": f"[Attached file: {att['filename']}]\n{att['content']}",
-            })
+            parts.append(
+                {
+                    "type": "text",
+                    "text": f"[Attached file: {att['filename']}]\n{att['content']}",
+                }
+            )
     messages[last_user_idx] = {"role": "user", "content": parts}
 
 

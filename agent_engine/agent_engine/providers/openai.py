@@ -2,17 +2,25 @@ import json
 import logging
 import time
 
+import openai
 from openai import AsyncOpenAI
 
+from ..errors import (
+    ProviderAuthError,
+    ProviderContentFilterError,
+    ProviderOverloadedError,
+    ProviderRateLimitError,
+    ProviderTimeoutError,
+)
 from .base import (
+    MAX_TOOL_ITERATIONS,
     LLMProvider,
     LLMResponse,
     ToolCallResult,
     ToolExecutor,
-    MAX_TOOL_ITERATIONS,
-    _find_tool,
     _append_attachments,
     _execute_tool,
+    _find_tool,
     _make_tool_not_found_result,
 )
 
@@ -55,10 +63,14 @@ class OpenAIProvider(LLMProvider):
     ) -> LLMResponse:
         model = model or self._default_model
         # Work on a copy to avoid mutating the caller's list
-        messages = list(messages) if messages is not None else [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ]
+        messages = (
+            list(messages)
+            if messages is not None
+            else [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ]
+        )
 
         if attachments:
             _append_attachments(messages, attachments)
@@ -85,7 +97,11 @@ class OpenAIProvider(LLMProvider):
 
                 choice = response.choices[0]
 
-                if choice.finish_reason == "tool_calls" and choice.message.tool_calls and tool_executor:
+                if (
+                    choice.finish_reason == "tool_calls"
+                    and choice.message.tool_calls
+                    and tool_executor
+                ):
                     messages.append(choice.message.model_dump())
 
                     for tool_call in choice.message.tool_calls:
@@ -97,18 +113,26 @@ class OpenAIProvider(LLMProvider):
 
                         tool_def = _find_tool(tools, fn.name)
                         if tool_def is None:
-                            tool_result = _make_tool_not_found_result(fn.name, fn.arguments or "{}")
+                            tool_result = _make_tool_not_found_result(
+                                fn.name, fn.arguments or "{}"
+                            )
                         else:
                             tool_result = await _execute_tool(
-                                tool_executor, tool_def, fn.name, args, fn.arguments or "{}"
+                                tool_executor,
+                                tool_def,
+                                fn.name,
+                                args,
+                                fn.arguments or "{}",
                             )
 
                         all_tools_called.append(tool_result)
-                        messages.append({
-                            "role": "tool",
-                            "tool_call_id": tool_call.id,
-                            "content": tool_result.result_json or tool_result.error,
-                        })
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tool_call.id,
+                                "content": tool_result.result_json or tool_result.error,
+                            }
+                        )
 
                     continue
 
@@ -132,6 +156,38 @@ class OpenAIProvider(LLMProvider):
                 tools_called=all_tools_called,
             )
 
+        except openai.RateLimitError as e:
+            duration_ms = int((time.monotonic() - start) * 1000)
+            retry_after = 0.0
+            if hasattr(e, "response") and e.response is not None:
+                retry_after = float(e.response.headers.get("retry-after", 0))
+            raise ProviderRateLimitError(str(e), retry_after_sec=retry_after) from e
+        except openai.AuthenticationError as e:
+            raise ProviderAuthError(str(e)) from e
+        except openai.PermissionDeniedError as e:
+            raise ProviderAuthError(str(e)) from e
+        except openai.APITimeoutError as e:
+            raise ProviderTimeoutError(str(e)) from e
+        except openai.InternalServerError as e:
+            raise ProviderOverloadedError(str(e)) from e
+        except openai.APIConnectionError as e:
+            raise ProviderTimeoutError(str(e)) from e
+        except openai.BadRequestError as e:
+            # Content filter or malformed request
+            msg = str(e)
+            if "content_filter" in msg.lower() or "content_policy" in msg.lower():
+                raise ProviderContentFilterError(msg) from e
+            duration_ms = int((time.monotonic() - start) * 1000)
+            logger.error("OpenAI error: %s", e)
+            return LLMResponse(
+                text="",
+                tokens_used=total_tokens,
+                model_used=model,
+                duration_ms=duration_ms,
+                error=msg,
+                error_type="bad_request",
+                tools_called=all_tools_called,
+            )
         except Exception as e:
             duration_ms = int((time.monotonic() - start) * 1000)
             logger.error("OpenAI error: %s", e)

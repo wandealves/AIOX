@@ -2,14 +2,20 @@ import json
 import logging
 import time
 
+from ..errors import (
+    ProviderAuthError,
+    ProviderOverloadedError,
+    ProviderRateLimitError,
+    ProviderTimeoutError,
+)
 from .base import (
+    MAX_TOOL_ITERATIONS,
     LLMProvider,
     LLMResponse,
     ToolCallResult,
     ToolExecutor,
-    MAX_TOOL_ITERATIONS,
-    _find_tool,
     _execute_tool,
+    _find_tool,
     _make_tool_not_found_result,
 )
 
@@ -55,10 +61,12 @@ class GeminiProvider(LLMProvider):
                     system_instruction = _extract_text_content(msg["content"])
                     continue
                 role = "model" if msg["role"] == "assistant" else "user"
-                chat_contents.append({
-                    "role": role,
-                    "parts": _to_gemini_parts(msg["content"]),
-                })
+                chat_contents.append(
+                    {
+                        "role": role,
+                        "parts": _to_gemini_parts(msg["content"]),
+                    }
+                )
         else:
             chat_contents = [{"role": "user", "parts": [{"text": user_message}]}]
 
@@ -92,9 +100,8 @@ class GeminiProvider(LLMProvider):
 
                 if response.usage_metadata:
                     total_tokens += (
-                        (response.usage_metadata.prompt_token_count or 0)
-                        + (response.usage_metadata.candidates_token_count or 0)
-                    )
+                        response.usage_metadata.prompt_token_count or 0
+                    ) + (response.usage_metadata.candidates_token_count or 0)
 
                 candidate = response.candidates[0] if response.candidates else None
                 function_calls = []
@@ -107,10 +114,12 @@ class GeminiProvider(LLMProvider):
 
                 if function_calls and tool_executor:
                     # Add the model's response (may contain text + function_call parts)
-                    chat_contents.append({
-                        "role": "model",
-                        "parts": _parts_to_dict(candidate.content.parts),
-                    })
+                    chat_contents.append(
+                        {
+                            "role": "model",
+                            "parts": _parts_to_dict(candidate.content.parts),
+                        }
+                    )
 
                     tool_response_parts = []
                     for fc in function_calls:
@@ -119,7 +128,9 @@ class GeminiProvider(LLMProvider):
 
                         tool_def = _find_tool(tools, fc.name)
                         if tool_def is None:
-                            tool_result = _make_tool_not_found_result(fc.name, args_json)
+                            tool_result = _make_tool_not_found_result(
+                                fc.name, args_json
+                            )
                             result_response: dict = {"error": tool_result.error}
                         else:
                             tool_result = await _execute_tool(
@@ -135,12 +146,14 @@ class GeminiProvider(LLMProvider):
                                 result_response = {"result": tool_result.result_json}
 
                         all_tools_called.append(tool_result)
-                        tool_response_parts.append({
-                            "function_response": {
-                                "name": fc.name,
-                                "response": result_response,
+                        tool_response_parts.append(
+                            {
+                                "function_response": {
+                                    "name": fc.name,
+                                    "response": result_response,
+                                }
                             }
-                        })
+                        )
 
                     chat_contents.append({"role": "user", "parts": tool_response_parts})
                     continue
@@ -149,7 +162,8 @@ class GeminiProvider(LLMProvider):
                 text = ""
                 if candidate and candidate.content and candidate.content.parts:
                     text = "".join(
-                        p.text for p in candidate.content.parts
+                        p.text
+                        for p in candidate.content.parts
                         if hasattr(p, "text") and p.text and not p.function_call
                     )
 
@@ -175,13 +189,24 @@ class GeminiProvider(LLMProvider):
 
         except Exception as e:
             duration_ms = int((time.monotonic() - start) * 1000)
+            msg = str(e)
+            err_lower = msg.lower()
+            # Map google-genai exceptions to our error hierarchy
+            if "429" in msg or "rate" in err_lower:
+                raise ProviderRateLimitError(msg) from e
+            if "401" in msg or "403" in msg or "authentication" in err_lower:
+                raise ProviderAuthError(msg) from e
+            if "503" in msg or "overloaded" in err_lower or "unavailable" in err_lower:
+                raise ProviderOverloadedError(msg) from e
+            if "timeout" in err_lower:
+                raise ProviderTimeoutError(msg) from e
             logger.error("Gemini error: %s", e)
             return LLMResponse(
                 text="",
                 tokens_used=total_tokens,
                 model_used=model,
                 duration_ms=duration_ms,
-                error=str(e),
+                error=msg,
                 tools_called=all_tools_called,
             )
 
@@ -190,13 +215,15 @@ class GeminiProvider(LLMProvider):
 # Private helpers
 # ---------------------------------------------------------------------------
 
+
 def _extract_text_content(content) -> str:
     """Extract plain text from a message content that may be a string or parts list."""
     if isinstance(content, str):
         return content
     if isinstance(content, list):
         return " ".join(
-            p.get("text", "") for p in content
+            p.get("text", "")
+            for p in content
             if isinstance(p, dict) and p.get("type") == "text"
         )
     return str(content)
@@ -236,12 +263,16 @@ def _parts_to_dict(parts) -> list[dict]:
     result: list[dict] = []
     for part in parts:
         if part.function_call:
-            result.append({
-                "function_call": {
-                    "name": part.function_call.name,
-                    "args": dict(part.function_call.args) if part.function_call.args else {},
+            result.append(
+                {
+                    "function_call": {
+                        "name": part.function_call.name,
+                        "args": dict(part.function_call.args)
+                        if part.function_call.args
+                        else {},
+                    }
                 }
-            })
+            )
         elif hasattr(part, "text") and part.text:
             result.append({"text": part.text})
     return result
@@ -260,16 +291,18 @@ def _append_gemini_attachments(contents: list[dict], attachments: list[dict]) ->
     parts = list(contents[last_user_idx]["parts"])
     for att in attachments:
         if att["type"] == "image":
-            parts.append({
-                "inline_data": {
-                    "mime_type": att["content_type"],
-                    "data": att["data_b64"],
+            parts.append(
+                {
+                    "inline_data": {
+                        "mime_type": att["content_type"],
+                        "data": att["data_b64"],
+                    }
                 }
-            })
+            )
         else:
-            parts.append({
-                "text": f"[Attached file: {att['filename']}]\n{att['content']}"
-            })
+            parts.append(
+                {"text": f"[Attached file: {att['filename']}]\n{att['content']}"}
+            )
     contents[last_user_idx] = {"role": "user", "parts": parts}
 
 

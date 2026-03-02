@@ -4,25 +4,38 @@ import time
 
 import httpx
 
+from ..errors import (
+    ProviderOverloadedError,
+    ProviderTimeoutError,
+)
 from .base import (
+    MAX_TOOL_ITERATIONS,
     LLMProvider,
     LLMResponse,
     ToolCallResult,
     ToolExecutor,
-    MAX_TOOL_ITERATIONS,
-    _find_tool,
     _append_attachments,
     _execute_tool,
+    _find_tool,
     _make_tool_not_found_result,
 )
 
 logger = logging.getLogger(__name__)
 
 # Parameter names that carry credentials and must NOT be shown to the LLM.
-_SENSITIVE_PARAMS = frozenset({
-    "api_key", "apikey", "api_secret", "secret", "token",
-    "access_token", "refresh_token", "password", "credentials",
-})
+_SENSITIVE_PARAMS = frozenset(
+    {
+        "api_key",
+        "apikey",
+        "api_secret",
+        "secret",
+        "token",
+        "access_token",
+        "refresh_token",
+        "password",
+        "credentials",
+    }
+)
 
 
 def _strip_tools_for_ollama(tools: list[dict]) -> list[dict]:
@@ -37,23 +50,25 @@ def _strip_tools_for_ollama(tools: list[dict]) -> list[dict]:
         fn = tool.get("function", {})
         params = fn.get("parameters", {})
         properties = {
-            k: v for k, v in params.get("properties", {}).items()
+            k: v
+            for k, v in params.get("properties", {}).items()
             if k.lower() not in _SENSITIVE_PARAMS
         }
         required = [
-            r for r in params.get("required", [])
-            if r.lower() not in _SENSITIVE_PARAMS
+            r for r in params.get("required", []) if r.lower() not in _SENSITIVE_PARAMS
         ]
         clean_params = {**params, "properties": properties, "required": required}
 
-        cleaned.append({
-            "type": "function",
-            "function": {
-                "name": fn.get("name", ""),
-                "description": fn.get("description", ""),
-                "parameters": clean_params,
-            },
-        })
+        cleaned.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": fn.get("name", ""),
+                    "description": fn.get("description", ""),
+                    "parameters": clean_params,
+                },
+            }
+        )
     return cleaned
 
 
@@ -80,10 +95,14 @@ class OllamaProvider(LLMProvider):
     ) -> LLMResponse:
         model = model or self.model
         # Work on a copy to avoid mutating the caller's list
-        messages = list(messages) if messages is not None else [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ]
+        messages = (
+            list(messages)
+            if messages is not None
+            else [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ]
+        )
 
         # Clean version for the LLM (no private metadata, no credentials).
         # The original `tools` list is kept for _find_tool / _execute_tool.
@@ -125,36 +144,50 @@ class OllamaProvider(LLMProvider):
                 tool_calls = message.get("tool_calls", [])
 
                 if tool_calls and tool_executor:
-                    messages.append({
-                        "role": "assistant",
-                        "content": assistant_content,
-                        "tool_calls": tool_calls,
-                    })
+                    messages.append(
+                        {
+                            "role": "assistant",
+                            "content": assistant_content,
+                            "tool_calls": tool_calls,
+                        }
+                    )
 
                     for tool_call in tool_calls:
                         fn = tool_call.get("function", {})
                         tool_name = fn.get("name", "")
                         arguments = fn.get("arguments", {})
                         args_json = (
-                            json.dumps(arguments) if isinstance(arguments, dict) else str(arguments)
+                            json.dumps(arguments)
+                            if isinstance(arguments, dict)
+                            else str(arguments)
                         )
 
                         tool_def = _find_tool(tools, tool_name)
                         if tool_def is None:
-                            tool_result = _make_tool_not_found_result(tool_name, args_json)
+                            tool_result = _make_tool_not_found_result(
+                                tool_name, args_json
+                            )
                         else:
-                            arguments_dict = arguments if isinstance(arguments, dict) else {}
+                            arguments_dict = (
+                                arguments if isinstance(arguments, dict) else {}
+                            )
                             tool_result = await _execute_tool(
-                                tool_executor, tool_def, tool_name, arguments_dict, args_json
+                                tool_executor,
+                                tool_def,
+                                tool_name,
+                                arguments_dict,
+                                args_json,
                             )
 
                         all_tools_called.append(tool_result)
-                        messages.append({
-                            "role": "tool",
-                            "name": tool_name,
-                            "content": tool_result.result_json or tool_result.error,
-                            "tool_call_id": tool_call.get("id", ""),
-                        })
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "name": tool_name,
+                                "content": tool_result.result_json or tool_result.error,
+                                "tool_call_id": tool_call.get("id", ""),
+                            }
+                        )
 
                     continue
 
@@ -179,6 +212,13 @@ class OllamaProvider(LLMProvider):
             )
 
         except httpx.HTTPStatusError as e:
+            status = e.response.status_code
+            if status == 429:
+                raise ProviderOverloadedError(f"Ollama rate limited: {e}") from e
+            if status >= 500:
+                raise ProviderOverloadedError(
+                    f"Ollama server error ({status}): {e}"
+                ) from e
             duration_ms = int((time.monotonic() - start) * 1000)
             logger.error("Ollama HTTP error: %s", e)
             return LLMResponse(
@@ -186,20 +226,13 @@ class OllamaProvider(LLMProvider):
                 tokens_used=total_tokens,
                 model_used=model,
                 duration_ms=duration_ms,
-                error=f"HTTP {e.response.status_code}: {e.response.text}",
+                error=f"HTTP {status}: {e.response.text}",
                 tools_called=all_tools_called,
             )
+        except httpx.TimeoutException as e:
+            raise ProviderTimeoutError(f"Ollama timeout: {e}") from e
         except httpx.RequestError as e:
-            duration_ms = int((time.monotonic() - start) * 1000)
-            logger.error("Ollama request error: %s", e)
-            return LLMResponse(
-                text="",
-                tokens_used=total_tokens,
-                model_used=model,
-                duration_ms=duration_ms,
-                error=str(e),
-                tools_called=all_tools_called,
-            )
+            raise ProviderTimeoutError(f"Ollama connection error: {e}") from e
         except Exception as e:
             duration_ms = int((time.monotonic() - start) * 1000)
             logger.error("Ollama error: %s", e)

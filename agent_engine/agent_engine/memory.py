@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -12,11 +13,20 @@ class ConversationEntry:
     timestamp: str = ""
 
 
+MAX_MEMORY_ENTRY_LEN = 4_000
+
+
 @dataclass
 class RelevantMemory:
     content: str
     memory_type: str = "long_term"
     similarity: float = 0.0
+    source: str = "system"  # system | user | tool
+    trust_level: float = 1.0
+
+    @property
+    def is_trusted(self) -> bool:
+        return self.trust_level >= 0.5
 
 
 @dataclass
@@ -49,6 +59,8 @@ class MemoryContext:
                 content=mem.get("content", ""),
                 memory_type=mem.get("memory_type", "long_term"),
                 similarity=mem.get("similarity", 0.0),
+                source=mem.get("source", "system"),
+                trust_level=mem.get("trust_level", 1.0),
             ))
 
         return cls(recent_messages=recent, relevant_memories=memories)
@@ -63,12 +75,16 @@ class MemoryContext:
         2. Recent conversation history (from short-term memory)
         3. Current user message
         """
-        # Build system content with relevant memories
+        # Build system content with relevant memories (filter untrusted)
         system_content = system_prompt
-        if self.relevant_memories:
+        trusted_memories = [m for m in self.relevant_memories if m.is_trusted]
+        if trusted_memories:
             memory_section = "\n\n--- Relevant memories from past interactions ---"
-            for mem in self.relevant_memories:
-                memory_section += f"\n[{mem.memory_type}] {mem.content}"
+            for mem in trusted_memories:
+                content = mem.content[:MAX_MEMORY_ENTRY_LEN]
+                # Strip chat template markers that could confuse the LLM
+                content = _strip_markers(content)
+                memory_section += f"\n[{mem.memory_type}] {content}"
             system_content += memory_section
 
         messages = [{"role": "system", "content": system_content}]
@@ -81,6 +97,14 @@ class MemoryContext:
         messages.append({"role": "user", "content": user_message})
 
         return messages
+
+
+_CHAT_MARKERS = re.compile(r"<\|?(system|assistant|user|im_start|im_end)\|?>", re.IGNORECASE)
+
+
+def _strip_markers(text: str) -> str:
+    """Remove chat template markers from memory content."""
+    return _CHAT_MARKERS.sub("", text)
 
 
 @dataclass

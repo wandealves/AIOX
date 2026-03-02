@@ -19,8 +19,9 @@ class ToolExecutor:
     in the registry, otherwise falls back to HTTP execution.
     """
 
-    def __init__(self, tool_context: dict | None = None):
+    def __init__(self, tool_context: dict | None = None, policy=None):
         self.tool_context = tool_context or {}
+        self.policy = policy  # Optional Policy instance for domain filtering
 
     async def execute(
         self,
@@ -41,21 +42,36 @@ class ToolExecutor:
         builtin = registry.get_tool(tool_name)
         if builtin:
             return await self._execute_builtin(
-                builtin, arguments, auth_type=auth_type, auth_config=auth_config,
+                builtin,
+                arguments,
+                auth_type=auth_type,
+                auth_config=auth_config,
             )
 
         return await self._execute_http(
-            endpoint_url, http_method, arguments,
-            headers, auth_type, auth_config, timeout_sec,
+            endpoint_url,
+            http_method,
+            arguments,
+            headers,
+            auth_type,
+            auth_config,
+            timeout_sec,
         )
 
     async def _execute_builtin(
-        self, tool, arguments: dict,
-        auth_type: str = "", auth_config: dict | None = None,
+        self,
+        tool,
+        arguments: dict,
+        auth_type: str = "",
+        auth_config: dict | None = None,
     ) -> dict:
         """Execute a built-in tool locally."""
         start = time.monotonic()
-        ctx = {**self.tool_context, "auth_type": auth_type, "auth_config": auth_config or {}}
+        ctx = {
+            **self.tool_context,
+            "auth_type": auth_type,
+            "auth_config": auth_config or {},
+        }
         try:
             result = await tool.execute(arguments, context=ctx)
             duration_ms = int((time.monotonic() - start) * 1000)
@@ -85,6 +101,14 @@ class ToolExecutor:
         timeout_sec: int,
     ) -> dict:
         """Execute an HTTP-based tool call."""
+        # Policy: check URL domain
+        if self.policy and endpoint_url:
+            if not self.policy.check_tool_url(endpoint_url):
+                return {
+                    "result": "",
+                    "duration_ms": 0,
+                    "error": f"Domain not allowed by policy: {endpoint_url}",
+                }
         start = time.monotonic()
         req_headers = dict(headers or {})
         req_headers.setdefault("Content-Type", "application/json")
@@ -126,15 +150,30 @@ class ToolExecutor:
                     except json.JSONDecodeError:
                         result = body
 
+                    raw_result = (
+                        json.dumps(result)
+                        if isinstance(result, (dict, list))
+                        else str(result)
+                    )
+                    try:
+                        from ..sanitize import sanitize_tool_result
+
+                        raw_result = sanitize_tool_result(raw_result)
+                    except ImportError:
+                        pass
                     return {
-                        "result": json.dumps(result) if isinstance(result, (dict, list)) else str(result),
+                        "result": raw_result,
                         "duration_ms": duration_ms,
                         "error": "",
                     }
 
         except asyncio.TimeoutError:
             duration_ms = int((time.monotonic() - start) * 1000)
-            return {"result": "", "duration_ms": duration_ms, "error": "tool call timed out"}
+            return {
+                "result": "",
+                "duration_ms": duration_ms,
+                "error": "tool call timed out",
+            }
         except Exception as e:
             duration_ms = int((time.monotonic() - start) * 1000)
             logger.error("Tool execution error: %s", e)

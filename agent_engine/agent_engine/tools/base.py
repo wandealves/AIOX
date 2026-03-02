@@ -13,6 +13,9 @@ class BuiltinTool(ABC):
     name: str
     description: str
     parameters: dict  # JSON Schema for the tool arguments
+    version: str = "1.0.0"
+    idempotent: bool = False
+    side_effect_level: str = "none"  # none | read | write | destructive
 
     @abstractmethod
     async def execute(self, arguments: dict, context: dict | None = None) -> dict:

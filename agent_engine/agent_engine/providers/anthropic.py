@@ -2,16 +2,24 @@ import json
 import logging
 import time
 
+import anthropic
 from anthropic import AsyncAnthropic
 
+from ..errors import (
+    ProviderAuthError,
+    ProviderContentFilterError,
+    ProviderOverloadedError,
+    ProviderRateLimitError,
+    ProviderTimeoutError,
+)
 from .base import (
+    MAX_TOOL_ITERATIONS,
     LLMProvider,
     LLMResponse,
     ToolCallResult,
     ToolExecutor,
-    MAX_TOOL_ITERATIONS,
-    _find_tool,
     _execute_tool,
+    _find_tool,
     _make_tool_not_found_result,
 )
 
@@ -83,36 +91,50 @@ class AnthropicProvider(LLMProvider):
                 response = await self._client.messages.create(**request_kwargs)
 
                 if response.usage:
-                    total_tokens += response.usage.input_tokens + response.usage.output_tokens
+                    total_tokens += (
+                        response.usage.input_tokens + response.usage.output_tokens
+                    )
 
                 tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
 
-                if tool_use_blocks and tool_executor and response.stop_reason == "tool_use":
+                if (
+                    tool_use_blocks
+                    and tool_executor
+                    and response.stop_reason == "tool_use"
+                ):
                     # Add the assistant message (with tool_use blocks) to history
-                    chat_messages.append({
-                        "role": "assistant",
-                        "content": [b.model_dump() for b in response.content],
-                    })
+                    chat_messages.append(
+                        {
+                            "role": "assistant",
+                            "content": [b.model_dump() for b in response.content],
+                        }
+                    )
 
                     tool_results = []
                     for block in tool_use_blocks:
-                        args = dict(block.input) if isinstance(block.input, dict) else {}
+                        args = (
+                            dict(block.input) if isinstance(block.input, dict) else {}
+                        )
                         args_json = json.dumps(args)
 
                         tool_def = _find_tool(tools, block.name)
                         if tool_def is None:
-                            tool_result = _make_tool_not_found_result(block.name, args_json)
+                            tool_result = _make_tool_not_found_result(
+                                block.name, args_json
+                            )
                         else:
                             tool_result = await _execute_tool(
                                 tool_executor, tool_def, block.name, args, args_json
                             )
 
                         all_tools_called.append(tool_result)
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": tool_result.result_json or tool_result.error,
-                        })
+                        tool_results.append(
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": block.id,
+                                "content": tool_result.result_json or tool_result.error,
+                            }
+                        )
 
                     chat_messages.append({"role": "user", "content": tool_results})
                     continue
@@ -138,6 +160,38 @@ class AnthropicProvider(LLMProvider):
                 tools_called=all_tools_called,
             )
 
+        except anthropic.RateLimitError as e:
+            retry_after = 0.0
+            if hasattr(e, "response") and e.response is not None:
+                retry_after = float(e.response.headers.get("retry-after", 0))
+            raise ProviderRateLimitError(str(e), retry_after_sec=retry_after) from e
+        except anthropic.AuthenticationError as e:
+            raise ProviderAuthError(str(e)) from e
+        except anthropic.PermissionDeniedError as e:
+            raise ProviderAuthError(str(e)) from e
+        except anthropic.APITimeoutError as e:
+            raise ProviderTimeoutError(str(e)) from e
+        except anthropic.InternalServerError as e:
+            raise ProviderOverloadedError(str(e)) from e
+        except anthropic.APIConnectionError as e:
+            raise ProviderTimeoutError(str(e)) from e
+        except anthropic.BadRequestError as e:
+            msg = str(e)
+            if "content" in msg.lower() and (
+                "filter" in msg.lower() or "block" in msg.lower()
+            ):
+                raise ProviderContentFilterError(msg) from e
+            duration_ms = int((time.monotonic() - start) * 1000)
+            logger.error("Anthropic error: %s", e)
+            return LLMResponse(
+                text="",
+                tokens_used=total_tokens,
+                model_used=model,
+                duration_ms=duration_ms,
+                error=msg,
+                error_type="bad_request",
+                tools_called=all_tools_called,
+            )
         except Exception as e:
             duration_ms = int((time.monotonic() - start) * 1000)
             logger.error("Anthropic error: %s", e)
@@ -155,19 +209,23 @@ class AnthropicProvider(LLMProvider):
 # Private helpers
 # ---------------------------------------------------------------------------
 
+
 def _extract_text_content(content) -> str:
     """Extract plain text from a message content that may be a string or parts list."""
     if isinstance(content, str):
         return content
     if isinstance(content, list):
         return " ".join(
-            p.get("text", "") for p in content
+            p.get("text", "")
+            for p in content
             if isinstance(p, dict) and p.get("type") == "text"
         )
     return str(content)
 
 
-def _append_anthropic_attachments(messages: list[dict], attachments: list[dict]) -> None:
+def _append_anthropic_attachments(
+    messages: list[dict], attachments: list[dict]
+) -> None:
     """Append attachments to the last user message in Anthropic multimodal format.
 
     Images use the base64 source format; other files are appended as text parts.
@@ -182,23 +240,29 @@ def _append_anthropic_attachments(messages: list[dict], attachments: list[dict])
 
     content = messages[last_user_idx]["content"]
     parts: list[dict] = (
-        [{"type": "text", "text": content}] if isinstance(content, str) else list(content)
+        [{"type": "text", "text": content}]
+        if isinstance(content, str)
+        else list(content)
     )
     for att in attachments:
         if att["type"] == "image":
-            parts.append({
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": att["content_type"],
-                    "data": att["data_b64"],
-                },
-            })
+            parts.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": att["content_type"],
+                        "data": att["data_b64"],
+                    },
+                }
+            )
         else:
-            parts.append({
-                "type": "text",
-                "text": f"[Attached file: {att['filename']}]\n{att['content']}",
-            })
+            parts.append(
+                {
+                    "type": "text",
+                    "text": f"[Attached file: {att['filename']}]\n{att['content']}",
+                }
+            )
     messages[last_user_idx] = {"role": "user", "content": parts}
 
 
@@ -211,9 +275,13 @@ def _to_anthropic_api_tools(tools: list[dict]) -> list[dict]:
     result = []
     for tool in tools:
         fn = tool.get("function", {})
-        result.append({
-            "name": fn.get("name", ""),
-            "description": fn.get("description", ""),
-            "input_schema": fn.get("parameters", {"type": "object", "properties": {}}),
-        })
+        result.append(
+            {
+                "name": fn.get("name", ""),
+                "description": fn.get("description", ""),
+                "input_schema": fn.get(
+                    "parameters", {"type": "object", "properties": {}}
+                ),
+            }
+        )
     return result

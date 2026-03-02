@@ -57,6 +57,9 @@ class TavilySearchTool(BuiltinTool):
         "events, facts, documentation, and up-to-date information."
     )
     parameters = TAVILY_SEARCH_PARAMETERS
+    version = "1.0.0"
+    idempotent = True
+    side_effect_level = "read"
 
     @staticmethod
     def _resolve_api_key(arguments: dict, context: dict | None) -> str:
@@ -142,12 +145,14 @@ class TavilySearchTool(BuiltinTool):
 
                     results = []
                     for r in data.get("results", []):
-                        results.append({
-                            "title": r.get("title", ""),
-                            "url": r.get("url", ""),
-                            "content": r.get("content", ""),
-                            "score": r.get("score", 0),
-                        })
+                        results.append(
+                            {
+                                "title": r.get("title", ""),
+                                "url": r.get("url", ""),
+                                "content": r.get("content", ""),
+                                "score": r.get("score", 0),
+                            }
+                        )
 
                     return {
                         "status": "success",

@@ -32,6 +32,37 @@ class Config:
             "TRACING_OTLP_ENDPOINT", "localhost:4317"
         )
 
+        # Budget limits
+        self.budget_max_steps = int(os.getenv("BUDGET_MAX_STEPS", "15"))
+        self.budget_max_tokens = int(os.getenv("BUDGET_MAX_TOKENS", "50000"))
+        self.budget_max_time_sec = float(os.getenv("BUDGET_MAX_TIME_SEC", "90"))
+        self.budget_max_cost_usd = float(os.getenv("BUDGET_MAX_COST_USD", "1.0"))
+
+        # Retry
+        self.retry_max_retries = int(os.getenv("RETRY_MAX_RETRIES", "3"))
+        self.retry_base_delay_sec = float(os.getenv("RETRY_BASE_DELAY_SEC", "1.0"))
+        self.retry_max_delay_sec = float(os.getenv("RETRY_MAX_DELAY_SEC", "30.0"))
+
+        # Planner
+        self.planner_enabled = os.getenv("PLANNER_ENABLED", "").lower() in ("true", "1")
+        self.planner_model = os.getenv("PLANNER_MODEL", "")
+
+        # Fallback
+        self.fallback_providers = [
+            p.strip()
+            for p in os.getenv("FALLBACK_PROVIDERS", "").split(",")
+            if p.strip()
+        ]
+
+        # Model router
+        self.model_router_enabled = os.getenv("MODEL_ROUTER_ENABLED", "").lower() in (
+            "true",
+            "1",
+        )
+
+        # Logging
+        self.log_json = os.getenv("LOG_JSON", "true").lower() in ("true", "1")
+
     @property
     def grpc_target(self) -> str:
         return f"{self.grpc_host}:{self.grpc_port}"

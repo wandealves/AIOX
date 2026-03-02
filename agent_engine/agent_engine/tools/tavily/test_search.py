@@ -82,11 +82,13 @@ class TestTavilySearchTool(unittest.TestCase):
 
         with patch.dict(os.environ, {"TAVILY_API_KEY": "tvly-test-key"}):
             result = self._run(
-                self.tool.execute({
-                    "query": "python asyncio",
-                    "max_results": 2,
-                    "include_answer": True,
-                })
+                self.tool.execute(
+                    {
+                        "query": "python asyncio",
+                        "max_results": 2,
+                        "include_answer": True,
+                    }
+                )
             )
 
         self.assertEqual(result["status"], "success")
@@ -155,7 +157,12 @@ class TestTavilySearchTool(unittest.TestCase):
 
     def test_registered_in_builtins(self):
         # Importing the tools package triggers registration
-        from ..registry import get_tool as get_builtin_tool, is_builtin as is_builtin_tool
+        from ..registry import (
+            get_tool as get_builtin_tool,
+        )
+        from ..registry import (
+            is_builtin as is_builtin_tool,
+        )
 
         self.assertTrue(is_builtin_tool("tavily_search"))
         tool = get_builtin_tool("tavily_search")
@@ -256,7 +263,9 @@ class TestTavilySearchTool(unittest.TestCase):
     def test_invalid_search_depth_defaults_to_basic(self):
         """Invalid search_depth should fall back to 'basic'."""
         with patch.dict(os.environ, {"TAVILY_API_KEY": "tvly-test-key"}):
-            with patch("agent_engine.tools.tavily.search.aiohttp.ClientSession") as mock_cls:
+            with patch(
+                "agent_engine.tools.tavily.search.aiohttp.ClientSession"
+            ) as mock_cls:
                 api_response = {"results": [], "answer": ""}
                 mock_resp = AsyncMock()
                 mock_resp.status = 200
@@ -274,10 +283,12 @@ class TestTavilySearchTool(unittest.TestCase):
                 mock_cls.return_value = mock_session
 
                 result = self._run(
-                    self.tool.execute({
-                        "query": "test",
-                        "search_depth": "invalid",
-                    })
+                    self.tool.execute(
+                        {
+                            "query": "test",
+                            "search_depth": "invalid",
+                        }
+                    )
                 )
 
                 self.assertEqual(result["status"], "success")
