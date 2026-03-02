@@ -18,6 +18,44 @@ from .base import (
 
 logger = logging.getLogger(__name__)
 
+# Parameter names that carry credentials and must NOT be shown to the LLM.
+_SENSITIVE_PARAMS = frozenset({
+    "api_key", "apikey", "api_secret", "secret", "token",
+    "access_token", "refresh_token", "password", "credentials",
+})
+
+
+def _strip_tools_for_ollama(tools: list[dict]) -> list[dict]:
+    """Build a clean tools list for the Ollama API.
+
+    - Removes private metadata fields (_endpoint_url, _auth_config, …)
+    - Removes sensitive parameters (api_key, token, …) from the schema
+      so the LLM doesn't hallucinate placeholder values for credentials.
+    """
+    cleaned = []
+    for tool in tools:
+        fn = tool.get("function", {})
+        params = fn.get("parameters", {})
+        properties = {
+            k: v for k, v in params.get("properties", {}).items()
+            if k.lower() not in _SENSITIVE_PARAMS
+        }
+        required = [
+            r for r in params.get("required", [])
+            if r.lower() not in _SENSITIVE_PARAMS
+        ]
+        clean_params = {**params, "properties": properties, "required": required}
+
+        cleaned.append({
+            "type": "function",
+            "function": {
+                "name": fn.get("name", ""),
+                "description": fn.get("description", ""),
+                "parameters": clean_params,
+            },
+        })
+    return cleaned
+
 
 class OllamaProvider(LLMProvider):
     """Ollama chat completions provider with tool/function calling support."""
@@ -47,6 +85,10 @@ class OllamaProvider(LLMProvider):
             {"role": "user", "content": user_message},
         ]
 
+        # Clean version for the LLM (no private metadata, no credentials).
+        # The original `tools` list is kept for _find_tool / _execute_tool.
+        llm_tools = _strip_tools_for_ollama(tools) if tools else None
+
         if attachments:
             _append_attachments(messages, attachments)
 
@@ -65,8 +107,8 @@ class OllamaProvider(LLMProvider):
                     },
                     "stream": False,
                 }
-                if tools and tool_executor:
-                    payload["tools"] = tools
+                if llm_tools and tool_executor:
+                    payload["tools"] = llm_tools
 
                 response = await self._client.post(
                     f"{self.base_url}/api/chat",
@@ -76,7 +118,7 @@ class OllamaProvider(LLMProvider):
                 response.raise_for_status()
                 data = response.json()
 
-                total_tokens += data.get("prompt_eval_count", 0) + data.get("eval_count", 0)
+                total_tokens += data.get("eval_count", 0)
 
                 message = data.get("message", {})
                 assistant_content = message.get("content", "")

@@ -44,7 +44,7 @@ class TestTavilySearchTool(unittest.TestCase):
         self.assertEqual(result["status"], "error")
         self.assertIn("query", result["error"])
 
-    @patch("agent.tools.tavily.search.aiohttp.ClientSession")
+    @patch("agent_engine.tools.tavily.search.aiohttp.ClientSession")
     def test_successful_search(self, mock_session_cls):
         api_response = {
             "query": "python asyncio",
@@ -96,7 +96,7 @@ class TestTavilySearchTool(unittest.TestCase):
         self.assertEqual(result["data"]["results"][0]["title"], "asyncio docs")
         self.assertIn("asyncio", result["data"]["answer"])
 
-    @patch("agent.tools.tavily.search.aiohttp.ClientSession")
+    @patch("agent_engine.tools.tavily.search.aiohttp.ClientSession")
     def test_api_error_response(self, mock_session_cls):
         mock_resp = AsyncMock()
         mock_resp.status = 401
@@ -119,7 +119,7 @@ class TestTavilySearchTool(unittest.TestCase):
         self.assertEqual(result["status"], "error")
         self.assertIn("401", result["error"])
 
-    @patch("agent.tools.tavily.search.aiohttp.ClientSession")
+    @patch("agent_engine.tools.tavily.search.aiohttp.ClientSession")
     def test_server_error_response(self, mock_session_cls):
         mock_resp = AsyncMock()
         mock_resp.status = 500
@@ -162,7 +162,7 @@ class TestTavilySearchTool(unittest.TestCase):
         self.assertIsNotNone(tool)
         self.assertIsInstance(tool, TavilySearchTool)
 
-    @patch("agent.tools.tavily.search.aiohttp.ClientSession")
+    @patch("agent_engine.tools.tavily.search.aiohttp.ClientSession")
     def test_api_key_from_arguments(self, mock_session_cls):
         """API key should be resolved from arguments (parameter default)."""
         api_response = {"results": [], "answer": ""}
@@ -192,7 +192,7 @@ class TestTavilySearchTool(unittest.TestCase):
         payload = call_args[1]["json"]
         self.assertEqual(payload["api_key"], "tvly-from-args")
 
-    @patch("agent.tools.tavily.search.aiohttp.ClientSession")
+    @patch("agent_engine.tools.tavily.search.aiohttp.ClientSession")
     def test_api_key_from_auth_config(self, mock_session_cls):
         """API key should be resolved from context auth_config instead of env var."""
         api_response = {"results": [], "answer": ""}
@@ -223,7 +223,7 @@ class TestTavilySearchTool(unittest.TestCase):
         payload = call_args[1]["json"]
         self.assertEqual(payload["api_key"], "tvly-from-config")
 
-    @patch("agent.tools.tavily.search.aiohttp.ClientSession")
+    @patch("agent_engine.tools.tavily.search.aiohttp.ClientSession")
     def test_api_key_from_bearer_token(self, mock_session_cls):
         """API key should be resolved from context auth_config bearer token."""
         api_response = {"results": [], "answer": ""}
@@ -256,7 +256,7 @@ class TestTavilySearchTool(unittest.TestCase):
     def test_invalid_search_depth_defaults_to_basic(self):
         """Invalid search_depth should fall back to 'basic'."""
         with patch.dict(os.environ, {"TAVILY_API_KEY": "tvly-test-key"}):
-            with patch("agent.tools.tavily.search.aiohttp.ClientSession") as mock_cls:
+            with patch("agent_engine.tools.tavily.search.aiohttp.ClientSession") as mock_cls:
                 api_response = {"results": [], "answer": ""}
                 mock_resp = AsyncMock()
                 mock_resp.status = 200

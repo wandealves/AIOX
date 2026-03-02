@@ -150,11 +150,11 @@ services:
           memory: 256M
           cpus: "1.0"
 
-  aiox-agent:
+  aiox-agent-engine:
     build:
       context: .
-      dockerfile: agent/Dockerfile
-    container_name: aiox-agent
+      dockerfile: agent_engine/Dockerfile
+    container_name: aiox-agent-engine
     extra_hosts:
       # Allows the container to reach services on the host machine (Linux + Mac + Windows)
       - "host.docker.internal:host-gateway"

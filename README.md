@@ -164,7 +164,7 @@ Services started:
 | NATS       | 4222, 8222       | Message bus (HTTP monitor at :8222) |
 | ejabberd   | 5222, 5275, 5280 | XMPP server                         |
 | aiox-api   | 8080, 50051      | REST API + gRPC + WebSocket         |
-| aiox-agent | —                | Python AI worker                    |
+| aiox-agent-engine | —                | Python AI worker                    |
 | aiox-admin | 3000             | Next.js dashboard                   |
 | Jaeger     | 16686, 4317      | Trace collector + UI                |
 | Prometheus | 9090             | Metrics scraper + alerting          |
@@ -1368,7 +1368,7 @@ docker compose logs aiox-api | grep -E "orchestrator|dispatcher|error"
 The circuit breaker opens after 5 consecutive gRPC failures. Check worker connectivity:
 
 ```bash
-docker compose logs aiox-agent --tail=50
+docker compose logs aiox-agent-engine --tail=50
 curl http://localhost:8080/metrics | grep circuit_breaker
 ```
 
