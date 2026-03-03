@@ -72,6 +72,86 @@ def _strip_tools_for_ollama(tools: list[dict]) -> list[dict]:
     return cleaned
 
 
+def _parse_text_tool_calls(text: str, tools: list[dict] | None) -> list[dict]:
+    """Try to extract tool calls from plain text when the model doesn't use structured tool_calls.
+
+    Many Ollama models (especially smaller ones) output tool calls as JSON in their
+    text response instead of using the structured tool_calls API field.
+
+    Recognizes patterns like:
+      {"name": "tool_name", "parameters": {...}}
+      {"name": "tool_name", "arguments": {...}}
+      [{"name": "tool_name", ...}]
+    Also handles the model prefixing text before the JSON (e.g. "Ollama\\n{...}").
+    """
+    if not tools or not text:
+        return []
+
+    # Collect known tool names for validation
+    known_names = set()
+    for tool in tools:
+        fn = tool.get("function", {})
+        name = fn.get("name", "")
+        if name:
+            known_names.add(name)
+            # Also add hyphenated variant
+            known_names.add(name.replace("_", "-"))
+
+    # Try to find JSON object(s) in the text
+    results = []
+    # Find all potential JSON objects
+    brace_depth = 0
+    json_start = None
+    for i, ch in enumerate(text):
+        if ch == "{" and brace_depth == 0:
+            json_start = i
+            brace_depth = 1
+        elif ch == "{":
+            brace_depth += 1
+        elif ch == "}" and brace_depth > 0:
+            brace_depth -= 1
+            if brace_depth == 0 and json_start is not None:
+                candidate = text[json_start : i + 1]
+                parsed = _try_parse_tool_call(candidate, known_names)
+                if parsed:
+                    results.append(parsed)
+                json_start = None
+
+    return results
+
+
+def _try_parse_tool_call(candidate: str, known_names: set[str]) -> dict | None:
+    """Try to parse a JSON string as a tool call. Returns an Ollama-style tool_call dict or None."""
+    try:
+        data = json.loads(candidate)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    name = data.get("name", "")
+    if not name:
+        return None
+
+    # Check if name matches a known tool (exact or normalized)
+    normalized = name.replace("-", "_").lower()
+    if name not in known_names and normalized not in {n.replace("-", "_").lower() for n in known_names}:
+        return None
+
+    # Accept "parameters", "arguments", or "input" as the args field
+    args = data.get("parameters") or data.get("arguments") or data.get("input") or {}
+    if not isinstance(args, dict):
+        args = {}
+
+    return {
+        "function": {
+            "name": normalized,
+            "arguments": args,
+        }
+    }
+
+
 class OllamaProvider(LLMProvider):
     """Ollama chat completions provider with tool/function calling support."""
 
@@ -142,6 +222,17 @@ class OllamaProvider(LLMProvider):
                 message = data.get("message", {})
                 assistant_content = message.get("content", "")
                 tool_calls = message.get("tool_calls", [])
+
+                # Fallback: if model emitted tool calls as plain text instead
+                # of using the structured tool_calls field, try to parse them.
+                if not tool_calls and tool_executor and tools and assistant_content:
+                    text_tool_calls = _parse_text_tool_calls(assistant_content, llm_tools)
+                    if text_tool_calls:
+                        logger.info(
+                            "Parsed %d text-based tool call(s) from Ollama response",
+                            len(text_tool_calls),
+                        )
+                        tool_calls = text_tool_calls
 
                 if tool_calls and tool_executor:
                     messages.append(

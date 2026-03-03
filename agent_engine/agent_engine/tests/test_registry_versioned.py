@@ -34,11 +34,15 @@ class FakeToolV2(BuiltinTool):
 
 class TestVersionedRegistry(unittest.TestCase):
     def setUp(self):
-        # Clear registry for isolation
+        # Save and clear registry for test isolation
+        self._saved = {k: dict(v) for k, v in _BUILTIN_TOOLS.items()}
         _BUILTIN_TOOLS.clear()
 
     def tearDown(self):
+        # Restore original registry state so other tests aren't affected
         _BUILTIN_TOOLS.clear()
+        for k, v in self._saved.items():
+            _BUILTIN_TOOLS[k] = v
 
     def test_register_and_get_by_name(self):
         register_tool(FakeTool())
