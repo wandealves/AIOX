@@ -80,7 +80,7 @@ class OpenAIProvider(LLMProvider):
         total_tokens = 0
 
         try:
-            for _ in range(MAX_TOOL_ITERATIONS):
+            for iteration in range(MAX_TOOL_ITERATIONS):
                 request_kwargs: dict = {
                     "model": model,
                     "messages": messages,
@@ -89,6 +89,12 @@ class OpenAIProvider(LLMProvider):
                 }
                 if tools:
                     request_kwargs["tools"] = tools
+                    # First iteration: force the model to call a tool.
+                    # Subsequent iterations: let the model decide (auto)
+                    # so it can return a final text response.
+                    request_kwargs["tool_choice"] = (
+                        "required" if iteration == 0 else "auto"
+                    )
 
                 response = await self.client.chat.completions.create(**request_kwargs)
 

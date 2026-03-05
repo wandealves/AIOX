@@ -12,8 +12,10 @@ from .registry import get_all_tools, get_tool, is_builtin, register_tool
 # Auto-register all built-in tools on import
 # ---------------------------------------------------------------------------
 from .tavily import TavilySearchTool
+from .smtp import SmtpSendEmailTool
 
 register_tool(TavilySearchTool())
+register_tool(SmtpSendEmailTool())
 
 __all__ = [
     "BuiltinTool",
