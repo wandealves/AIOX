@@ -121,7 +121,10 @@ func (r *Registry) GetToolsForAgent(ctx context.Context, agentID uuid.UUID) ([]*
 			return nil, err
 		}
 		for _, at := range agentTools {
-			toolType := "http"
+			toolType := at.ToolType
+			if toolType == "" {
+				toolType = "http"
+			}
 			toolMap[at.Name] = &ResolvedTool{
 				ID:           at.ID,
 				Name:         at.Name,

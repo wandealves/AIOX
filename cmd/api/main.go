@@ -34,6 +34,7 @@ import (
 	"github.com/aiox-platform/aiox/internal/server"
 	"github.com/aiox-platform/aiox/internal/tools"
 	"github.com/aiox-platform/aiox/internal/tracing"
+	"github.com/aiox-platform/aiox/internal/utcp"
 	"github.com/aiox-platform/aiox/internal/users"
 	"github.com/aiox-platform/aiox/internal/worker"
 	pb "github.com/aiox-platform/aiox/internal/worker/workerpb"
@@ -194,6 +195,11 @@ func main() {
 	pluginsSvc := plugins.NewService(pluginsRepo, systemToolsRepo)
 	pluginsHandler := plugins.NewHandler(pluginsSvc)
 
+	// UTCP
+	utcpRepo := utcp.NewRepository(pool)
+	utcpSvc := utcp.NewService(utcpRepo, toolsRepo, cfg.Encryption.Key)
+	utcpHandler := utcp.NewHandler(utcpSvc)
+
 	// Task dispatcher: NATS tasks → gRPC workers → outbound messages
 	dispatcher := worker.NewDispatcher(
 		workerPool, publisher, consumerMgr,
@@ -330,6 +336,13 @@ func main() {
 
 		ExportMCPTools: mcpHandler.ExportMCPTools,
 		ImportMCPTools: mcpHandler.ImportMCPTools,
+
+		UTCPConnectManual: utcpHandler.ConnectManual,
+		UTCPListManuals:   utcpHandler.ListManuals,
+		UTCPGetManual:     utcpHandler.GetManual,
+		UTCPSyncManual:    utcpHandler.SyncManual,
+		UTCPDeleteManual:  utcpHandler.DeleteManual,
+		UTCPDiscoverTools: utcpHandler.DiscoverTools,
 
 		AuthMiddleware: auth.Middleware(authSvc),
 

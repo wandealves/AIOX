@@ -24,6 +24,8 @@ type ToolDefinition struct {
 	Version      string          `json:"version"`
 	Category     string          `json:"category"`
 	OutputSchema json.RawMessage `json:"output_schema"`
+	ToolType     string          `json:"tool_type"`
+	UTCPManualID *uuid.UUID      `json:"utcp_manual_id,omitempty"`
 	CreatedAt    time.Time       `json:"created_at"`
 	UpdatedAt    time.Time       `json:"updated_at"`
 }

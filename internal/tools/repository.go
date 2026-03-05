@@ -24,7 +24,8 @@ const toolColumns = `id, agent_id, tool_name, COALESCE(description,''), COALESCE
 		       COALESCE(endpoint_url,''), COALESCE(http_method,'GET'), COALESCE(headers,'{}'::jsonb),
 		       COALESCE(auth_type,''), COALESCE(auth_config,'{}'::jsonb), COALESCE(is_active,true),
 		       COALESCE(timeout_sec,30), COALESCE(version,'1.0.0'), COALESCE(category,'custom'),
-		       COALESCE(output_schema,'{}'::jsonb), created_at, COALESCE(updated_at, created_at)`
+		       COALESCE(output_schema,'{}'::jsonb), COALESCE(tool_type,'http'), utcp_manual_id,
+		       created_at, COALESCE(updated_at, created_at)`
 
 func scanTool(row interface{ Scan(dest ...any) error }) (*ToolDefinition, error) {
 	var t ToolDefinition
@@ -33,6 +34,7 @@ func scanTool(row interface{ Scan(dest ...any) error }) (*ToolDefinition, error)
 		&t.EndpointURL, &t.HTTPMethod, &t.Headers,
 		&t.AuthType, &t.AuthConfig, &t.IsActive, &t.TimeoutSec,
 		&t.Version, &t.Category, &t.OutputSchema,
+		&t.ToolType, &t.UTCPManualID,
 		&t.CreatedAt, &t.UpdatedAt,
 	)
 	return &t, err
@@ -41,14 +43,15 @@ func scanTool(row interface{ Scan(dest ...any) error }) (*ToolDefinition, error)
 // Create inserts a new tool definition.
 func (r *Repository) Create(ctx context.Context, tool *ToolDefinition) error {
 	query := `
-		INSERT INTO agent_tools (id, agent_id, tool_name, description, parameters, endpoint_url, http_method, headers, auth_type, auth_config, is_active, timeout_sec, version, category, output_schema, policy, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, '{}'::jsonb, $16, $17)`
+		INSERT INTO agent_tools (id, agent_id, tool_name, description, parameters, endpoint_url, http_method, headers, auth_type, auth_config, is_active, timeout_sec, version, category, output_schema, policy, tool_type, utcp_manual_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, '{}'::jsonb, $16, $17, $18, $19)`
 
 	_, err := r.pool.Exec(ctx, query,
 		tool.ID, tool.AgentID, tool.Name, tool.Description,
 		tool.Parameters, tool.EndpointURL, tool.HTTPMethod, tool.Headers,
 		tool.AuthType, tool.AuthConfig, tool.IsActive, tool.TimeoutSec,
 		tool.Version, tool.Category, tool.OutputSchema,
+		tool.ToolType, tool.UTCPManualID,
 		tool.CreatedAt, tool.UpdatedAt,
 	)
 	if err != nil {

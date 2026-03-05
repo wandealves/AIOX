@@ -2,17 +2,20 @@
 
 import { use, useState, useMemo } from "react";
 import Link from "next/link";
-import { ArrowLeft, Search, Wrench, Package } from "lucide-react";
+import { ArrowLeft, Search, Wrench, Package, Link2 } from "lucide-react";
 import { useAgent } from "@/hooks/use-agents";
 import {
   useTools,
   useDeleteTool,
   useToggleToolActive,
 } from "@/hooks/use-tools";
+import { useUTCPManuals, useUTCPSync, useUTCPDelete } from "@/hooks/use-utcp";
 import { CatalogCard } from "@/components/tools/catalog-card";
 import { InstalledToolCard } from "@/components/tools/installed-tool-card";
 import { TemplateConfigDialog } from "@/components/tools/template-config-dialog";
 import { CategoryFilter } from "@/components/tools/category-filter";
+import { UTCPConnectDialog } from "@/components/tools/utcp-connect-dialog";
+import { UTCPManualCard } from "@/components/tools/utcp-manual-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   TOOL_TEMPLATES,
@@ -22,9 +25,9 @@ import {
   type ToolTemplate,
   type ToolCategory,
 } from "@/lib/tool-templates";
-import type { ToolDefinition } from "@/lib/types";
+import type { ToolDefinition, UTCPManual } from "@/lib/types";
 
-type ActiveTab = "catalog" | "installed";
+type ActiveTab = "catalog" | "installed" | "utcp";
 
 export default function AgentToolsPage({
   params,
@@ -36,9 +39,13 @@ export default function AgentToolsPage({
   const { data: toolsData, isLoading: toolsLoading } = useTools(id);
   const deleteTool = useDeleteTool(id);
   const toggleActive = useToggleToolActive(id);
+  const { data: manualsData } = useUTCPManuals(id);
+  const syncManual = useUTCPSync(id);
+  const deleteManual = useUTCPDelete(id);
 
   const agent = agentData?.data;
   const tools = toolsData?.data || [];
+  const manuals = manualsData?.data || [];
   const isLoading = agentLoading || toolsLoading;
 
   const [activeTab, setActiveTab] = useState<ActiveTab>("catalog");
@@ -47,6 +54,9 @@ export default function AgentToolsPage({
   const [selectedTemplate, setSelectedTemplate] = useState<ToolTemplate | null>(null);
   const [editingTool, setEditingTool] = useState<{ tool: ToolDefinition; template: ToolTemplate } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<ToolDefinition | null>(null);
+  const [showUTCPConnect, setShowUTCPConnect] = useState(false);
+  const [deleteManualConfirm, setDeleteManualConfirm] = useState<UTCPManual | null>(null);
+  const [syncingManualId, setSyncingManualId] = useState<string | null>(null);
 
   // Set of installed template IDs
   const installedTemplateIds = useMemo(
@@ -165,6 +175,22 @@ export default function AgentToolsPage({
             </span>
           )}
         </button>
+        <button
+          onClick={() => setActiveTab("utcp")}
+          className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+            activeTab === "utcp"
+              ? "bg-[var(--card)] text-[var(--foreground)] shadow-sm"
+              : "text-[var(--foreground-muted)] hover:text-[var(--foreground)]"
+          }`}
+        >
+          <Link2 className="h-4 w-4" />
+          UTCP
+          {manuals.length > 0 && (
+            <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-xs font-semibold text-indigo-600">
+              {manuals.length}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Catalog Tab */}
@@ -251,6 +277,116 @@ export default function AgentToolsPage({
             </div>
           )}
         </>
+      )}
+
+      {/* UTCP Tab */}
+      {activeTab === "utcp" && (
+        <>
+          <div className="mb-5 flex items-center justify-between">
+            <p className="text-sm text-[var(--foreground-muted)]">
+              Connect external tool providers via UTCP protocol
+            </p>
+            <button
+              onClick={() => setShowUTCPConnect(true)}
+              className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-700 px-4 py-2 text-sm font-medium text-white transition-all hover:from-indigo-700 hover:to-indigo-800"
+            >
+              <Link2 className="h-4 w-4" />
+              Connect UTCP
+            </button>
+          </div>
+
+          {manuals.length === 0 ? (
+            <div
+              className="rounded-xl border border-[var(--card-border)] bg-[var(--card)] py-16 text-center"
+              style={{ boxShadow: "var(--shadow-sm)" }}
+            >
+              <Link2 className="mx-auto h-12 w-12 text-[var(--foreground-subtle)]" />
+              <h3 className="mt-4 text-base font-semibold text-[var(--foreground)]">
+                No UTCP providers connected
+              </h3>
+              <p className="mt-1 text-sm text-[var(--foreground-muted)]">
+                Connect an external UTCP provider to discover and use its tools.
+              </p>
+              <button
+                onClick={() => setShowUTCPConnect(true)}
+                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-700 px-4 py-2 text-sm font-medium text-white transition-all hover:from-indigo-700 hover:to-indigo-800"
+              >
+                <Link2 className="h-4 w-4" />
+                Connect UTCP Provider
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {manuals.map((manual, i) => (
+                <UTCPManualCard
+                  key={manual.id}
+                  manual={manual}
+                  index={i}
+                  isSyncing={syncingManualId === manual.id}
+                  onSync={async (m) => {
+                    setSyncingManualId(m.id);
+                    try {
+                      await syncManual.mutateAsync(m.id);
+                    } finally {
+                      setSyncingManualId(null);
+                    }
+                  }}
+                  onDelete={(m) => setDeleteManualConfirm(m)}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* UTCP Connect Dialog */}
+      {showUTCPConnect && (
+        <UTCPConnectDialog
+          agentId={id}
+          onClose={() => setShowUTCPConnect(false)}
+        />
+      )}
+
+      {/* UTCP Delete Confirmation */}
+      {deleteManualConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setDeleteManualConfirm(null)}
+          />
+          <div className="relative z-10 mx-4">
+            <div
+              className="w-full max-w-sm rounded-xl border border-[var(--card-border)] bg-[var(--card)] p-6"
+              style={{ boxShadow: "var(--shadow-lg)" }}
+            >
+              <h3 className="text-lg font-semibold text-[var(--foreground)]">
+                Disconnect UTCP Provider
+              </h3>
+              <p className="mt-2 text-sm text-[var(--foreground-muted)]">
+                Disconnect <strong>{deleteManualConfirm.name}</strong>? This will
+                remove all {deleteManualConfirm.tools_count} associated tools.
+              </p>
+              <div className="mt-5 flex gap-3">
+                <button
+                  onClick={async () => {
+                    await deleteManual.mutateAsync(deleteManualConfirm.id);
+                    setDeleteManualConfirm(null);
+                  }}
+                  disabled={deleteManual.isPending}
+                  className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                >
+                  {deleteManual.isPending ? "Removing..." : "Disconnect"}
+                </button>
+                <button
+                  onClick={() => setDeleteManualConfirm(null)}
+                  className="rounded-xl border border-[var(--card-border)] bg-[var(--card)] px-4 py-2 text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--background-tertiary)]"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Template Config Dialog (create) */}

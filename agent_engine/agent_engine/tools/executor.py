@@ -17,11 +17,16 @@ class ToolExecutor:
 
     Routes to built-in tools when a matching tool is registered
     in the registry, otherwise falls back to HTTP execution.
+
+    For UTCP tools with dynamic auth (e.g. login returns a JWT),
+    captured tokens are automatically injected into subsequent
+    UTCP tool calls within the same session.
     """
 
     def __init__(self, tool_context: dict | None = None, policy=None):
         self.tool_context = tool_context or {}
         self.policy = policy  # Optional Policy instance for domain filtering
+        self._session_tokens: dict[str, str] = {}  # namespace -> bearer token
 
     async def execute(
         self,
@@ -48,7 +53,20 @@ class ToolExecutor:
                 auth_config=auth_config,
             )
 
-        return await self._execute_http(
+        if tool_type == "utcp":
+            logger.info(
+                "Executing UTCP tool: %s via %s %s",
+                tool_name, http_method, endpoint_url,
+            )
+            # Inject session token if available and no static token was provided
+            namespace = tool_name.split("__")[0] if "__" in tool_name else ""
+            if namespace and auth_type == "bearer":
+                cfg = dict(auth_config or {})
+                if not cfg.get("token") and namespace in self._session_tokens:
+                    cfg["token"] = self._session_tokens[namespace]
+                    auth_config = cfg
+
+        result = await self._execute_http(
             endpoint_url,
             http_method,
             arguments,
@@ -57,6 +75,36 @@ class ToolExecutor:
             auth_config,
             timeout_sec,
         )
+
+        # Capture bearer tokens from UTCP tool responses (e.g. login)
+        if tool_type == "utcp" and not result.get("error"):
+            self._capture_session_token(tool_name, result.get("result", ""))
+
+        return result
+
+    def _capture_session_token(self, tool_name: str, raw_result: str) -> None:
+        """Capture a bearer token from a UTCP tool response.
+
+        When a tool (e.g. login) returns a JSON object with a "token" field,
+        store it so subsequent UTCP calls in the same namespace can use it.
+        """
+        if not raw_result:
+            return
+        try:
+            data = json.loads(raw_result)
+        except (json.JSONDecodeError, TypeError):
+            return
+        if not isinstance(data, dict):
+            return
+        token = data.get("token") or data.get("access_token") or ""
+        if token and isinstance(token, str):
+            namespace = tool_name.split("__")[0] if "__" in tool_name else ""
+            if namespace:
+                self._session_tokens[namespace] = token
+                logger.info(
+                    "Captured session token from %s for namespace %s",
+                    tool_name, namespace,
+                )
 
     async def _execute_builtin(
         self,

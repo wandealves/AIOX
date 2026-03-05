@@ -115,6 +115,14 @@ type HandlerSet struct {
 	ExportMCPTools http.HandlerFunc
 	ImportMCPTools http.HandlerFunc
 
+	// UTCP handlers
+	UTCPConnectManual http.HandlerFunc
+	UTCPListManuals   http.HandlerFunc
+	UTCPGetManual     http.HandlerFunc
+	UTCPSyncManual    http.HandlerFunc
+	UTCPDeleteManual  http.HandlerFunc
+	UTCPDiscoverTools http.HandlerFunc
+
 	// Auth middleware
 	AuthMiddleware func(http.Handler) http.Handler
 
@@ -249,6 +257,21 @@ func NewRouter(pool *pgxpool.Pool, natsClient *inats.Client, cfg RouterConfig, h
 							if h.ImportMCPTools != nil {
 								r.Post("/import", h.ImportMCPTools)
 							}
+						})
+					}
+
+					// UTCP routes
+					if h.UTCPConnectManual != nil {
+						r.Route("/utcp", func(r chi.Router) {
+							r.Post("/discover", h.UTCPDiscoverTools)
+							r.Post("/manuals", h.UTCPConnectManual)
+							r.Get("/manuals", h.UTCPListManuals)
+
+							r.Route("/manuals/{manualID}", func(r chi.Router) {
+								r.Get("/", h.UTCPGetManual)
+								r.Post("/sync", h.UTCPSyncManual)
+								r.Delete("/", h.UTCPDeleteManual)
+							})
 						})
 					}
 

@@ -280,6 +280,44 @@ export interface UpdateToolRequest {
   timeout_sec?: number;
 }
 
+// UTCP Manuals
+export interface UTCPManual {
+  id: string;
+  agent_id: string;
+  name: string;
+  description: string;
+  manual_url: string;
+  utcp_version: string;
+  auth_template: Record<string, unknown>;
+  is_active: boolean;
+  last_synced_at?: string;
+  tools_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UTCPToolSpec {
+  name: string;
+  description: string;
+  path: string;
+  method: string;
+  parameters?: Record<string, unknown>;
+}
+
+export interface UTCPDiscoverResult {
+  name: string;
+  description: string;
+  version: string;
+  auth_vars?: string[];
+  tools: UTCPToolSpec[];
+}
+
+export interface ConnectManualRequest {
+  name: string;
+  manual_url: string;
+  auth_values?: Record<string, string>;
+}
+
 // WebSocket message types
 export interface WSServerMessage {
   type: "message" | "error";
